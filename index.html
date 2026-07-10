@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 아레나 - 로비 하단 간략화 패치</title>
+    <title>3D 락온 아레나 - 빌드 조합 & 마나 가중치 패치</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; user-select: none; color: white; }
         
@@ -31,10 +31,10 @@
         .lobby-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
         .lobby-logo { font-size: 28px; font-weight: 900; color: #00ffcc; }
         
-        /* 하단 바 배치 (간략화 핵심) */
+        /* 하단 바 배치 */
         .lobby-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: auto; }
         
-        /* 심플한 세팅 버튼 */
+        /* 간략화된 세팅 버튼 */
         .btn-enter-select { 
             background: rgba(0, 255, 204, 0.1); border: 2px solid #00ffcc; color: #00ffcc; 
             border-radius: 8px; width: 220px; height: 55px; font-size: 16px; font-weight: bold; 
@@ -42,7 +42,7 @@
         }
         .btn-enter-select:hover { background: #00ffcc; color: #050515; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
 
-        /* [3] 독립된 캐릭터/무기 선택 화면 */
+        /* [3] 독립형 캐릭터/무기 조합 선택 화면 */
         #char-select-screen {
             background: rgba(5, 5, 20, 0.95);
             padding: 50px; box-sizing: border-box; justify-content: center; align-items: center;
@@ -55,17 +55,18 @@
         /* 캐릭터 카드 Grid */
         .char-grid { display: grid; grid-template-columns: repeat(3, 150px); gap: 15px; margin-top: 15px; }
         .char-card {
-            height: 100px; background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.1);
+            height: 110px; background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.1);
             border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            cursor: pointer; transition: all 0.2s;
+            cursor: pointer; transition: all 0.2s; text-align: center; padding: 5px;
         }
         .char-card:hover { background: rgba(0,255,204,0.05); border-color: rgba(0,255,204,0.4); }
         .char-card.active { background: rgba(0,255,204,0.15); border-color: #00ffcc; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
         .char-card .name { font-weight: bold; font-size: 16px; }
-        .char-card .type { font-size: 11px; color: #667; text-transform: uppercase; margin-top: 5px; }
+        .char-card .mp-info { font-size: 11px; color: #3399ff; margin-top: 4px; }
+        .char-card .type { font-size: 10px; color: #667; text-transform: uppercase; margin-top: 2px; }
         .char-card.active .type { color: #00ffcc; }
 
-        /* 무기 슬롯 리스트 */
+        /* 공통 무기 슬롯 리스트 */
         .weapon-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .weapon-slot {
             padding: 15px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);
@@ -114,31 +115,29 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">MINIMAL LOBBY SYSTEM</div>
+        <div class="game-subtitle">FREE CROSS-COMBINATION SYSTEM</div>
         <button class="btn" onclick="changeScene('lobby')">PRESS TO START</button>
     </div>
 
     <div id="lobby-screen" class="screen hidden">
         <div class="lobby-header">
             <div class="lobby-logo">ARENA LOCK-ON</div>
-            <div style="font-size:15px; color:#aaa;">현재 세팅 요원: <span style="color:#00ffcc; font-weight: bold;" id="lobby-current-summary">-</span></div>
+            <div style="font-size:15px; color:#aaa;">조합 프로필: <span style="color:#00ffcc; font-weight: bold;" id="lobby-current-summary">-</span></div>
         </div>
 
         <div class="lobby-footer">
             <div style="width: 240px;"></div>
-
-            <button class="btn-enter-select" onclick="changeScene('char-select')">🛠️ 캐릭터 / 무기 변경</button>
+            <button class="btn-enter-select" onclick="changeScene('char-select')">🛠️ 세팅 및 빌드 변경</button>
 
             <div class="battle-control-panel">
                 <div id="battle-pop-menu" class="battle-menu hidden">
-                    <button class="menu-btn" onclick="alert('⚔️ 매칭 풀 탐색 중...')">일반 PVP 대전 (더미)</button>
+                    <button class="menu-btn" onclick="alert('⚔️ 대전 상대를 매칭하는 중...')">일반 배틀매치</button>
                     <button class="menu-btn" style="color:#3b82f6; background:rgba(59,130,246,0.05);">AI 연습 난이도 설정</button>
                     <div class="ai-difficulty-selector">
                         <div class="diff-tab active" id="diff-easy" onclick="setAiDiff('easy')">쉬움</div>
                         <div class="diff-tab" id="diff-normal" onclick="setAiDiff('normal')">보통</div>
                         <div class="diff-tab" id="diff-hard" onclick="setAiDiff('hard')">어려움</div>
                     </div>
-                    <button class="menu-btn" onclick="alert('친선전 방이 개설되었습니다.')">친선전 방 파기</button>
                 </div>
                 <button class="btn btn-battle-trigger" onclick="toggleBattleMenu()">전투 매칭</button>
             </div>
@@ -147,32 +146,38 @@
 
     <div id="char-select-screen" class="screen hidden">
         <div class="select-container">
-            <div style="font-size: 32px; font-weight: 900; color: #00ffcc; border-bottom: 2px solid #00ffcc; padding-bottom: 10px;">AGENTS & WEAPONS SELECTION</div>
+            <div style="font-size: 32px; font-weight: 900; color: #00ffcc; border-bottom: 2px solid #00ffcc; padding-bottom: 10px;">AGENT & WEAPON CROSS COMBINATION</div>
             
             <div class="selection-zone">
                 <div class="select-box">
-                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 15px;">1. 요원(Character) 선택</div>
+                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 15px;">1. 요원 코어 선택 (고유 MP 틱 메커니즘)</div>
                     <div class="char-grid">
                         <div class="char-card active" id="sel-avenger" onclick="processSelectChar('avenger')">
-                            <span class="name">어벤저</span><span class="type">Avenger</span>
+                            <span class="name">어벤저</span>
+                            <span class="mp-info">⚡ 200ms 마다 +2</span>
+                            <span class="type">Avenger</span>
                         </div>
                         <div class="char-card" id="sel-slayer" onclick="processSelectChar('slayer')">
-                            <span class="name">슬레이어</span><span class="type">Slayer</span>
+                            <span class="name">슬레이어</span>
+                            <span class="mp-info">⚡ 150ms 마다 +3</span>
+                            <span class="type">Slayer</span>
                         </div>
                         <div class="char-card" id="sel-guardian" onclick="processSelectChar('guardian')">
-                            <span class="name">가디언</span><span class="type">Guardian</span>
+                            <span class="name">가디언</span>
+                            <span class="mp-info">⚡ 300ms 마다 +1</span>
+                            <span class="type">Guardian</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="select-box">
-                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 15px;">2. 전용 무기(Weapon) 무기고</div>
+                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 15px;">2. 공유 무기고 선택 (Cross-Weapon)</div>
                     <div class="weapon-list" id="select-screen-weapon-container">
                         </div>
                 </div>
             </div>
 
-            <button class="btn btn-complete" onclick="confirmSelection()">세팅 완료</button>
+            <button class="btn btn-complete" onclick="confirmSelection()">조합 조합 완료</button>
         </div>
     </div>
 
@@ -203,57 +208,48 @@
     </div>
 
     <script>
-        const WEAPON_DB = {
-            avenger: [
-                { id: "av_w1", name: "광선 검 (Plasma Sword)", dmgBonus: 5, color: 0x00ffcc },
-                { id: "av_w2", name: "차지 블래스터 (Laser Beam)", dmgBonus: 12, color: 0x00ff44 }
-            ],
-            slayer: [
-                { id: "sl_w1", name: "아수라 자객검 (Dual Dagger)", dmgBonus: 8, color: 0x00d2ff },
-                { id: "sl_w2", name: "섀도우 수리검 (Shuriken)", dmgBonus: 15, color: 0xff00bb }
-            ],
-            guardian: [
-                { id: "gd_w1", name: "그래비티 해머 (Gravity Hammer)", dmgBonus: 10, color: 0xffaa00 },
-                { id: "gd_w2", name: "수호자의 연화방패 (Titan Shield)", dmgBonus: 6, color: 0xff4400 }
-            ]
-        };
+        // 전역 공통 무기 마스터 데이터베이스 (어느 캐릭터든 귀속되지 않고 범용 장착 가능)
+        const COMMON_WEAPON_POOL = [
+            { id: "w_plasma", name: "플라즈마 스파이크 (Plasma Sword)", dmgBonus: 6, color: 0x00ffcc },
+            { id: "w_laser",  name: "헤비 레이저포 (Laser Blaster)",   dmgBonus: 15, color: 0x00ff44 },
+            { id: "w_dagger", name: "초진동 아수라검 (Dual Dagger)",   dmgBonus: 9,  color: 0x00d2ff },
+            { id: "w_shield", name: "타이탄 요새방패 (Titan Shield)",   dmgBonus: 4,  color: 0xffaa00 }
+        ];
 
+        // 캐릭터 데이터셋 (고유 스탯 및 마나 충전 메커니즘 계수 설계)
         const CHAR_DB = {
-            avenger:  { name: "어벤저", hp: 100, mp: 100, spd: 0.22, color: 0x00ff88 },
-            slayer:   { name: "슬레이어", hp: 85,  mp: 120, spd: 0.28, color: 0x00d2ff },
-            guardian: { name: "가디언", hp: 140, mp: 80,  spd: 0.16, color: 0xffaa00 }
+            avenger:  { name: "어벤저", hp: 100, mp: 100, spd: 0.22, color: 0x00ff88, regenInterval: 200, regenAmount: 2 },
+            slayer:   { name: "슬레이어", hp: 85,  mp: 120, spd: 0.28, color: 0x00d2ff, regenInterval: 150, regenAmount: 3 },
+            guardian: { name: "가디언", hp: 140, mp: 80,  spd: 0.16, color: 0xffaa00, regenInterval: 300, regenAmount: 1 }
         };
 
         let selectedChar = 'avenger';
         let selectedWeaponIdx = 0;
         let aiDifficulty = 'easy';
+        let lastRegenTime = 0;
 
         function processSelectChar(id) {
             selectedChar = id;
-            selectedWeaponIdx = 0;
-            
             document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active'));
             document.getElementById(`sel-${id}`).classList.add('active');
-
             player1.material.color.setHex(CHAR_DB[id].color);
-            renderSelectionWeapons();
         }
 
-        function renderSelectionWeapons() {
+        // 공통 무기 선택 리스트 렌더러
+        function renderCommonWeapons() {
             const container = document.getElementById('select-screen-weapon-container');
             container.innerHTML = "";
 
-            const list = WEAPON_DB[selectedChar];
-            list.forEach((w, idx) => {
+            COMMON_WEAPON_POOL.forEach((w, idx) => {
                 const slot = document.createElement('div');
                 slot.className = `weapon-slot ${idx === selectedWeaponIdx ? 'active' : ''}`;
                 slot.onclick = () => {
                     selectedWeaponIdx = idx;
-                    renderSelectionWeapons();
+                    renderCommonWeapons();
                 };
                 slot.innerHTML = `
                     <span class="w-name">${w.name}</span>
-                    <span class="w-dmg">공격력 보정: +${w.dmgBonus}</span>
+                    <span class="w-dmg">대미지 가중치: +${w.dmgBonus}</span>
                 `;
                 container.appendChild(slot);
             });
@@ -261,8 +257,8 @@
 
         function confirmSelection() {
             const cData = CHAR_DB[selectedChar];
-            const wData = WEAPON_DB[selectedChar][selectedWeaponIdx];
-            document.getElementById('lobby-current-summary').innerText = `${cData.name} (${wData.name})`;
+            const wData = COMMON_WEAPON_POOL[selectedWeaponIdx];
+            document.getElementById('lobby-current-summary').innerText = `${cData.name} + [${wData.name}]`;
             changeScene('lobby');
         }
 
@@ -285,23 +281,23 @@
             document.getElementById('game-hud').classList.add('hidden');
 
             if (sceneName === 'start') {
-                document.getElementById('start-screen').classList.remove('hidden');
+                document.getElementById('start-screen').remove('hidden');
             } else if (sceneName === 'lobby') {
                 document.getElementById('lobby-screen').classList.remove('hidden');
             } else if (sceneName === 'char-select') {
                 document.getElementById('char-select-screen').classList.remove('hidden');
-                renderSelectionWeapons();
+                renderCommonWeapons();
             } else if (sceneName === 'game') {
                 document.getElementById('game-hud').classList.remove('hidden');
                 
                 const cData = CHAR_DB[selectedChar];
-                const wData = WEAPON_DB[selectedChar][selectedWeaponIdx];
+                const wData = COMMON_WEAPON_POOL[selectedWeaponIdx];
 
                 p1Stats.maxHp = cData.hp; p1Stats.hp = cData.hp;
                 p1Stats.maxMp = cData.mp; p1Stats.mp = cData.mp;
                 defaultSpeed = cData.spd;
 
-                document.getElementById('hud-weapon-desc').innerText = `장착 무기: ${wData.name} (+${wData.dmgBonus} DMG)`;
+                document.getElementById('hud-weapon-desc').innerText = `조합 무기: ${wData.name} (+${wData.dmgBonus} DMG)`;
 
                 const label = document.getElementById('hud-p2-label');
                 if(aiDifficulty === 'easy') { label.innerText = "ENEMY (AI 쉬움)"; player2.material.color.setHex(0xffaa00); }
@@ -314,11 +310,12 @@
                 player2.position.set(10, 1.0, 0);
                 p2Stats.hp = 100; p2Stats.mp = 100;
                 isGrabbed = false; isRolling = false;
+                lastRegenTime = performance.now();
                 updateUI();
             }
         }
 
-        // --- Three.js 그래픽 코어 ---
+        // --- Three.js 그래픽 엔진 설계 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050515);
 
@@ -408,7 +405,7 @@
             if (p1Stats.mp < data.mpCost) return;
             p1Stats.mp -= data.mpCost; updateUI();
 
-            const wData = WEAPON_DB[selectedChar][selectedWeaponIdx];
+            const wData = COMMON_WEAPON_POOL[selectedWeaponIdx];
             const finalDamage = data.damage + wData.dmgBonus;
 
             const toEnemy = new THREE.Vector3().subVectors(player2.position, player1.position).normalize();
@@ -449,6 +446,15 @@
             const isGameActive = !document.getElementById('game-hud').classList.contains('hidden');
 
             if (isGameActive) {
+                // 핵심 요구 사항: 캐릭터 고유 속성 데이터에 기인한 가변적 MP 젠 타임 루프 연산
+                const currentCharData = CHAR_DB[selectedChar];
+                if (timestamp - lastRegenTime > currentCharData.interval ?? currentCharData.regenInterval) {
+                    if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + currentCharData.regenAmount);
+                    if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 2); // 상대 적은 기본값 젠
+                    updateUI(); 
+                    lastRegenTime = timestamp;
+                }
+
                 const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position); moveForward.y = 0;
                 const distanceToEnemy = moveForward.length(); moveForward.normalize();
                 const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
@@ -511,6 +517,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // 초기 빌드 세팅 가동
         processSelectChar('avenger');
         confirmSelection();
         changeScene('start');
