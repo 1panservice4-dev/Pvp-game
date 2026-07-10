@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 아레나 - 캐릭터 선택 씬 독립 패치</title>
+    <title>3D 락온 아레나 - 로비 하단 간략화 패치</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; user-select: none; color: white; }
         
@@ -25,28 +25,28 @@
         
         /* [2] 메인 로비 화면 */
         #lobby-screen {
-            background: linear-gradient(to bottom, rgba(15, 23, 42, 0.85) 0%, rgba(2, 6, 23, 0.98) 100%);
+            background: linear-gradient(to bottom, rgba(15, 23, 42, 0.4) 0%, rgba(2, 6, 23, 0.95) 100%);
             padding: 40px; box-sizing: border-box; justify-content: space-between;
         }
         .lobby-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
         .lobby-logo { font-size: 28px; font-weight: 900; color: #00ffcc; }
         
-        .lobby-main { display: flex; flex: 1; margin: 40px 0; gap: 30px; }
-        .main-status-panel {
-            width: 400px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(0,255,204,0.2);
-            border-radius: 12px; padding: 30px; backdrop-filter: blur(10px);
-            display: flex; flex-direction: column; justify-content: space-between;
+        /* 하단 바 배치 (간략화 핵심) */
+        .lobby-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: auto; }
+        
+        /* 심플한 세팅 버튼 */
+        .btn-enter-select { 
+            background: rgba(0, 255, 204, 0.1); border: 2px solid #00ffcc; color: #00ffcc; 
+            border-radius: 8px; width: 220px; height: 55px; font-size: 16px; font-weight: bold; 
+            cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
         }
-        .panel-title { font-size: 22px; font-weight: bold; border-left: 4px solid #00ffcc; padding-left: 10px; margin-bottom: 25px; }
-        .stat-group { display: flex; flex-direction: column; gap: 15px; font-size: 16px; color: #ccc; }
-        .stat-item { display: flex; justify-content: space-between; }
-        .stat-val { color: #00ffcc; font-weight: bold; }
+        .btn-enter-select:hover { background: #00ffcc; color: #050515; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
 
-        /* [3] 독립된 캐릭터/무기 선택 화면 (요청사항 핵심) */
+        /* [3] 독립된 캐릭터/무기 선택 화면 */
         #char-select-screen {
             background: rgba(5, 5, 20, 0.95);
             padding: 50px; box-sizing: border-box; justify-content: center; align-items: center;
-            z-index: 150; /* 로비보다 위에 깔리도록 설정 */
+            z-index: 150;
         }
         .select-container { width: 1000px; display: flex; flex-direction: column; gap: 30px; }
         .selection-zone { display: flex; gap: 40px; }
@@ -76,8 +76,7 @@
         .weapon-slot .w-name { font-weight: bold; }
         .weapon-slot .w-dmg { font-size: 13px; color: #ff3366; }
 
-        /* 버튼 및 제어장치 */
-        .lobby-footer { display: flex; justify-content: flex-end; width: 100%; }
+        /* 배틀 제어장치 */
         .battle-control-panel { position: relative; }
         .battle-menu {
             position: absolute; bottom: 85px; right: 0; width: 280px;
@@ -91,8 +90,6 @@
 
         .btn { padding: 15px 40px; font-size: 16px; font-weight: bold; color: #050515; background: #00ffcc; border: none; border-radius: 30px; cursor: pointer; transition: all 0.2s; text-align: center;}
         .btn:hover { background: #fff; transform: translateY(-2px); }
-        .btn-enter-select { background: transparent; border: 2px solid #00ffcc; color: #00ffcc; border-radius: 8px; width: 100%; box-sizing: border-box; margin-top: 20px; padding: 12px; }
-        .btn-enter-select:hover { background: rgba(0,255,204,0.1); color: #fff; }
         .btn-battle-trigger { width: 240px; height: 70px; border-radius: 12px; font-size: 24px; background: #ff3366; color: white; box-shadow: 0 0 20px rgba(255,51,102,0.4); }
         .btn-battle-trigger:hover { background: #ff5588; }
         .btn-complete { background: #00ffcc; color: #050515; width: 200px; align-self: flex-end; padding: 15px; border-radius: 8px; font-size: 18px; }
@@ -117,34 +114,21 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">INDEPENDENT SELECTION SCENE</div>
+        <div class="game-subtitle">MINIMAL LOBBY SYSTEM</div>
         <button class="btn" onclick="changeScene('lobby')">PRESS TO START</button>
     </div>
 
     <div id="lobby-screen" class="screen hidden">
         <div class="lobby-header">
             <div class="lobby-logo">ARENA LOCK-ON</div>
-            <div style="font-size:15px; color:#aaa;">현재 세팅: <span style="color:#00ffcc;" id="lobby-current-summary">-</span></div>
-        </div>
-
-        <div class="lobby-main">
-            <div class="main-status-panel">
-                <div>
-                    <div class="panel-title">현재 대기실 프로필</div>
-                    <div class="stat-group">
-                        <div class="stat-item"><span>선택된 요원</span><span class="stat-val" id="lobby-char-name" style="color:#fff;">-</span></div>
-                        <div class="stat-item"><span>장착된 무기</span><span class="stat-val" id="lobby-weapon-name">-</span></div>
-                        <div class="stat-item"><span>체력 수치</span><span class="stat-val" id="lobby-char-hp">-</span></div>
-                        <div class="stat-item"><span>마나 한계치</span><span class="stat-val" id="lobby-char-mp">-</span></div>
-                        <div class="stat-item"><span>고유 기동력</span><span class="stat-val" id="lobby-char-spd">-</span></div>
-                    </div>
-                </div>
-                
-                <button class="btn btn-clean btn-enter-select" onclick="changeScene('char-select')">⚙️ 캐릭터 / 무기 변경창 돌입</button>
-            </div>
+            <div style="font-size:15px; color:#aaa;">현재 세팅 요원: <span style="color:#00ffcc; font-weight: bold;" id="lobby-current-summary">-</span></div>
         </div>
 
         <div class="lobby-footer">
+            <div style="width: 240px;"></div>
+
+            <button class="btn-enter-select" onclick="changeScene('char-select')">🛠️ 캐릭터 / 무기 변경</button>
+
             <div class="battle-control-panel">
                 <div id="battle-pop-menu" class="battle-menu hidden">
                     <button class="menu-btn" onclick="alert('⚔️ 매칭 풀 탐색 중...')">일반 PVP 대전 (더미)</button>
@@ -219,7 +203,6 @@
     </div>
 
     <script>
-        // 에셋 딕셔너리 정보 데이터 그룹
         const WEAPON_DB = {
             avenger: [
                 { id: "av_w1", name: "광선 검 (Plasma Sword)", dmgBonus: 5, color: 0x00ffcc },
@@ -236,20 +219,18 @@
         };
 
         const CHAR_DB = {
-            avenger:  { name: "어벤저 (Avenger)",  pos: "밸런스형 스트라이커", hp: 100, mp: 100, spd: 0.22, color: 0x00ff88 },
-            slayer:   { name: "슬레이어 (Slayer)",  pos: "고기동성 암살 특화",   hp: 85,  mp: 120, spd: 0.28, color: 0x00d2ff },
-            guardian: { name: "가디언 (Guardian)", pos: "고방어형 중전차 타입", hp: 140, mp: 80,  spd: 0.16, color: 0xffaa00 }
+            avenger:  { name: "어벤저", hp: 100, mp: 100, spd: 0.22, color: 0x00ff88 },
+            slayer:   { name: "슬레이어", hp: 85,  mp: 120, spd: 0.28, color: 0x00d2ff },
+            guardian: { name: "가디언", hp: 140, mp: 80,  spd: 0.16, color: 0xffaa00 }
         };
 
-        // 핵심 상태 보존 변수들
         let selectedChar = 'avenger';
         let selectedWeaponIdx = 0;
         let aiDifficulty = 'easy';
 
-        // 전용 내부 선택창 안에서의 인터랙션 핸들러
         function processSelectChar(id) {
             selectedChar = id;
-            selectedWeaponIdx = 0; // 초기 리셋
+            selectedWeaponIdx = 0;
             
             document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active'));
             document.getElementById(`sel-${id}`).classList.add('active');
@@ -278,20 +259,10 @@
             });
         }
 
-        // [세팅 완료] 버튼 누를 시 로비 데이터로 확정 전송 연동
         function confirmSelection() {
             const cData = CHAR_DB[selectedChar];
             const wData = WEAPON_DB[selectedChar][selectedWeaponIdx];
-
-            // 로비 UI 요소 데이터 교체 및 매핑
-            document.getElementById('lobby-char-name').innerText = cData.name;
-            document.getElementById('lobby-weapon-name').innerText = wData.name;
-            document.getElementById('lobby-char-hp').innerText = cData.hp;
-            document.getElementById('lobby-char-mp').innerText = cData.mp;
-            document.getElementById('lobby-char-spd').innerText = cData.spd;
-            document.getElementById('lobby-current-summary').innerText = `${cData.name} / ${wData.name}`;
-
-            // 세팅 완료 후 메인 대기실(로비) 화면으로 복귀
+            document.getElementById('lobby-current-summary').innerText = `${cData.name} (${wData.name})`;
             changeScene('lobby');
         }
 
@@ -307,7 +278,6 @@
             }, 100);
         }
 
-        // 전체 씬 내비게이터 허브 개편
         function changeScene(sceneName) {
             document.getElementById('start-screen').classList.add('hidden');
             document.getElementById('lobby-screen').classList.add('hidden');
@@ -320,11 +290,10 @@
                 document.getElementById('lobby-screen').classList.remove('hidden');
             } else if (sceneName === 'char-select') {
                 document.getElementById('char-select-screen').classList.remove('hidden');
-                renderSelectionWeapons(); // 선택 전용 창 진입할 때 무기 상태 리렌더링
+                renderSelectionWeapons();
             } else if (sceneName === 'game') {
                 document.getElementById('game-hud').classList.remove('hidden');
                 
-                // 최종 매치 진입 시 스탯 컴파일 바인딩
                 const cData = CHAR_DB[selectedChar];
                 const wData = WEAPON_DB[selectedChar][selectedWeaponIdx];
 
@@ -349,7 +318,7 @@
             }
         }
 
-        // --- Three.js 그래픽 기본 렌더링 세팅 ---
+        // --- Three.js 그래픽 코어 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050515);
 
@@ -398,8 +367,8 @@
         let isRolling = false; let rollFrames = 0; const rollDuration = 18; const rollSpeed = 0.55; let rollDirection = new THREE.Vector3();
 
         window.addEventListener('keydown', (e) => {
-            const sName = document.getElementById('game-hud').classList.contains('hidden') ? 'lobby' : 'game';
-            if (sName !== 'game') return;
+            const isGameActive = !document.getElementById('game-hud').classList.contains('hidden');
+            if (!isGameActive) return;
 
             const codeStr = e.code.toLowerCase();
             if(['arrowup','arrowdown','arrowleft','arrowright','space'].includes(codeStr)) e.preventDefault();
@@ -474,20 +443,12 @@
             if (p2Stats.hp <= 0) { setTimeout(() => { p2Stats.hp = 100; updateUI(); }, 1500); }
         }
 
-        let lastRegenTime = 0;
         function animate(timestamp) {
             requestAnimationFrame(animate);
 
-            // 현재 열린 UI 씬 감지식 계산
             const isGameActive = !document.getElementById('game-hud').classList.contains('hidden');
 
             if (isGameActive) {
-                if (timestamp - lastRegenTime > 200) {
-                    if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + 2);
-                    if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 1);
-                    updateUI(); lastRegenTime = timestamp;
-                }
-
                 const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position); moveForward.y = 0;
                 const distanceToEnemy = moveForward.length(); moveForward.normalize();
                 const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
@@ -500,8 +461,7 @@
                     if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);
                 } else if (isRolling) {
                     rollFrames++; player1.position.addScaledVector(rollDirection, rollSpeed);
-                    player1.rotation.x += 0.3; player1.rotation.z += 0.2; player1.scale.y = 0.6;
-                    if (rollFrames >= rollDuration) { isRolling = false; player1.scale.set(1.0, 1.0, 1.0); }
+                    if (rollFrames >= rollDuration) isRolling = false;
                 }
 
                 if (!isGrounded) {
@@ -525,12 +485,12 @@
                 for (let i = projectiles.length - 1; i >= 0; i--) {
                     const p = projectiles[i]; p.life--;
                     if (p.type === 'shockwave') {
-                        p.radius += 0.45; p.mesh.geometry.dispose(); p.mesh.geometry = new THREE.RingGeometry(p.radius - 0.6, p.radius, 32); p.mesh.geometry.rotateX(-Math.PI / 2); p.mesh.material.opacity -= 0.035;
+                        p.radius += 0.45; p.mesh.geometry.dispose(); p.mesh.geometry = new THREE.RingGeometry(p.radius - 0.6, p.radius, 32); p.mesh.geometry.rotateX(-Math.PI / 2);
                         const dist = player1.position.distanceTo(player2.position);
                         if (dist <= p.radius && dist >= p.radius - 2.5) hitEnemy(p.damage);
                     } else {
                         const currentDir = new THREE.Vector3().subVectors(player2.position, p.mesh.position).normalize();
-                        p.mesh.position.addScaledVector(currentDir, p.speed); p.mesh.lookAt(player2.position);
+                        p.mesh.position.addScaledVector(currentDir, p.speed);
                         if (p.mesh.position.distanceTo(player2.position) < 2.2) {
                             hitEnemy(p.damage); if (p.type === 'grab') isGrabbed = true;
                             scene.remove(p.mesh); projectiles.splice(i, 1); continue;
@@ -543,8 +503,6 @@
                 mainCamera.position.set(Math.sin(time) * 18, 8, Math.cos(time) * 18); mainCamera.lookAt(0, 0, 0);
             }
 
-            subCamera.position.set(0, 35, 0); subCamera.lookAt(0, 0, 0);
-            player2.rotation.y += 0.01;
             renderer.render(scene, mainCamera); subRenderer.render(scene, subCamera);
         }
 
@@ -553,7 +511,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 최초 시동 시 어벤저 기본 세팅을 로비 데이터에 주입
         processSelectChar('avenger');
         confirmSelection();
         changeScene('start');
