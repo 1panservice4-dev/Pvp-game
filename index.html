@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 배틀 아레나</title>
+    <title>3D 락온 배틀 아레나 - 그랩 리뉴얼</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: sans-serif; }
         
-        /* UI 레이아웃 */
         #ui {
             position: absolute; top: 10px; left: 10px; color: white;
             background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
@@ -16,7 +15,6 @@
         h3 { margin: 0 0 10px 0; color: #00ffcc; }
         .controls { font-size: 13px; line-height: 1.5; }
 
-        /* 상단 HP/MP 바 */
         #status-container {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
             display: flex; gap: 40px; background: rgba(0,0,0,0.6);
@@ -30,7 +28,6 @@
         .bar-fill { height: 100%; width: 100%; background: #ff3366; }
         .mp-fill { background: #3399ff; }
 
-        /* 좌측 하단 3인칭 미니맵 */
         #sub-view {
             position: absolute; bottom: 20px; left: 20px;
             width: 250px; height: 180px;
@@ -50,23 +47,21 @@
             <div class="bar-bg" style="height: 8px;"><div id="p1-mp" class="bar-fill mp-fill"></div></div>
         </div>
         <div class="status-box right">
-            <div class="label" style="color: #ff3366;">ENEMY (적)</div>
+            <div class="label" style="color: #ff3366;">ENEMY (적 - 고정됨)</div>
             <div class="bar-bg"><div id="p2-hp" class="bar-fill"></div></div>
             <div class="bar-bg" style="height: 8px;"><div id="p2-mp" class="bar-fill mp-fill"></div></div>
         </div>
     </div>
 
     <div id="ui">
-        <h3>락온 배틀 (즉시 실행 버전)</h3>
+        <h3>락온 배틀 (적 고정 & 완벽 그랩)</h3>
         <div class="controls">
             <b>[방향키]</b> 적 기준 이동 (↑돌진, ↓후진, ←→사이드스텝)<br>
             <b>[스킬 단축키 - WASD]</b><br>
-            - <span style="color: #ff9900;"><b>W (그랩):</b></span> MP 20 / 적 끌어당기기<br>
+            - <span style="color: #ff9900;"><b>W (그랩):</b></span> MP 20 / <B>적을 내 코앞까지 끝까지 끌어옴</B><br>
             - <span style="color: #ff3333;"><b>A (단검):</b></span> MP 15 / 고속 칼 투척<br>
             - <span style="color: #33ccff;"><b>S (베기):</b></span> MP 30 / 대형 검기 분출<br>
             - <span style="color: #cc33ff;"><b>D (충격파):</b></span> MP 25 / 주변 광역 폭발<br>
-            <br>
-            <span style="color: #00ffcc;">※ 화면이 안 보일 경우 마우스로 화면을 한 번 클릭해 주세요!</span>
         </div>
     </div>
 
@@ -125,14 +120,15 @@
             new THREE.SphereGeometry(0.8, 32, 32),
             new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x003311 })
         );
-        player1.position.set(-12, 0.5, 0);
+        player1.position.set(-10, 0.5, 0);
         scene.add(player1);
 
+        // 상대 캐릭터 (위치 고정됨)
         const player2 = new THREE.Mesh(
             new THREE.BoxGeometry(2.0, 2.0, 2.0),
             new THREE.MeshStandardMaterial({ color: 0xff3366, roughness: 0.2 })
         );
-        player2.position.set(12, 1.0, 0);
+        player2.position.set(10, 1.0, 0); // 맵 중앙 우측에 고정
         scene.add(player2);
 
         // 조준 가이드라인 선
@@ -141,14 +137,12 @@
         const guideLine = new THREE.Line(lineGeo, lineMat);
         scene.add(guideLine);
 
-        // --- 4. 조작 입력 제어 (물리 키 고정) ---
+        // --- 4. 조작 입력 제어 ---
         const keys = {};
         const projectiles = []; 
         const playerSpeed = 0.22; 
-        let enemyTime = 0;
-        let isGrabbed = false;
+        let isGrabbed = false; // 그랩 유무 플래그
 
-        // 브라우저가 창을 열자마자 포커스를 잡도록 유도
         window.focus();
         window.addEventListener('click', () => { window.focus(); });
 
@@ -158,7 +152,7 @@
             }
 
             keys[e.key] = true; 
-            keys[e.code] = true; // 물리 배열 배치 저장
+            keys[e.code] = true; 
 
             if (e.code === 'KeyW') useSkill('grab');
             if (e.code === 'KeyA') useSkill('dagger');
@@ -173,6 +167,9 @@
 
         // --- 5. 스킬 발사 처리 ---
         function useSkill(type) {
+            // 그랩 당하는 중에는 중복 발사 불가
+            if (isGrabbed && type === 'grab') return;
+
             const data = SKILL_DATA[type];
             if (p1Stats.mp < data.mpCost) return; 
 
@@ -189,7 +186,7 @@
                 const grabMesh = new THREE.Mesh(grabGeo, new THREE.MeshBasicMaterial({ color: 0xff9900 }));
                 grabMesh.position.copy(spawnPos);
                 scene.add(grabMesh);
-                projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.55, life: 50, damage: data.damage });
+                projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.6, life: 60, damage: data.damage });
 
             } else if (type === 'dagger') {
                 const daggerGeo = new THREE.ConeGeometry(0.6, 3.0, 16);
@@ -242,7 +239,7 @@
         function animate(timestamp) {
             requestAnimationFrame(animate);
 
-            // 마나 자동 회복 회로
+            // 마나 자동 회복
             if (timestamp - lastRegenTime > 200) {
                 if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + 1.5);
                 if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 1);
@@ -256,43 +253,27 @@
             forwardVec.normalize();
             const rightVec = new THREE.Vector3().crossVectors(forwardVec, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // 방향키 조작 반응
-            if (keys['ArrowUp'] && distanceToEnemy > 3.5) player1.position.addScaledVector(forwardVec, playerSpeed);
-            if (keys['ArrowDown']) player1.position.addScaledVector(forwardVec, -playerSpeed);
-            if (keys['ArrowLeft']) player1.position.addScaledVector(rightVec, playerSpeed);
-            if (keys['ArrowRight']) player1.position.addScaledVector(rightVec, -playerSpeed);
-
-            // 적 AI 패턴 
+            // 방향키 조작 반응 (그랩으로 적을 끌어당길 때는 플레이어 이동을 일시 잠금하여 정확도 향상)
             if (!isGrabbed) {
-                enemyTime += 0.015;
-                player2.position.z = Math.sin(enemyTime * 1.5) * 8;
-                player2.position.x = 12 + Math.cos(enemyTime) * 4;
+                if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(forwardVec, playerSpeed);
+                if (keys['ArrowDown']) player1.position.addScaledVector(forwardVec, -playerSpeed);
+                if (keys['ArrowLeft']) player1.position.addScaledVector(rightVec, playerSpeed);
+                if (keys['ArrowRight']) player1.position.addScaledVector(rightVec, -playerSpeed);
+            }
 
-                // 근접 반격기 작동
-                if (distanceToEnemy < 6.5 && Math.random() < 0.015 && p2Stats.mp >= 25) {
-                    p2Stats.mp -= 25;
-                    const eWaveGeo = new THREE.RingGeometry(0.5, 6.5, 32);
-                    eWaveGeo.rotateX(-Math.PI / 2);
-                    const eWaveMesh = new THREE.Mesh(eWaveGeo, new THREE.MeshBasicMaterial({ color: 0xff3333, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
-                    eWaveMesh.position.copy(player2.position);
-                    eWaveMesh.position.y = 0.2;
-                    scene.add(eWaveMesh);
-                    
-                    p1Stats.hp -= 20;
-                    if (p1Stats.hp < 0) p1Stats.hp = 0;
-                    updateUI();
-                    
-                    player1.position.addScaledVector(forwardVec, -1.8);
-                    setTimeout(() => scene.remove(eWaveMesh), 250);
-
-                    if (p1Stats.hp <= 0) {
-                        setTimeout(() => { p1Stats.hp = 100; p1Stats.mp = 100; updateUI(); }, 1500);
-                    }
+            // [리뉴얼 핵심] 그랩 피격 시 완전히 내 쪽으로 끌고 오는 LERP 연산
+            if (isGrabbed) {
+                // 내 전방 코앞(1.8유닛 거리)을 타겟 포인트로 지정
+                const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(forwardVec, 1.8);
+                targetPos.y = 1.0; // 높이 보정
+                
+                // 적의 위치를 내 코앞으로 강하게 끌어당김 (속도 0.25)
+                player2.position.lerp(targetPos, 0.25);
+                
+                // 도착 완료 검사
+                if (player2.position.distanceTo(targetPos) < 0.2) {
+                    isGrabbed = false; // 그랩 판정 해제
                 }
-            } else {
-                const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(forwardVec, 3.5);
-                player2.position.lerp(targetPos, 0.2);
-                if (player2.position.distanceTo(targetPos) < 1.8) isGrabbed = false;
             }
 
             // 가이드라인 조준선 연동
@@ -309,7 +290,7 @@
             subCamera.position.set(0, 35, 0);
             subCamera.lookAt(0, 0, 0);
 
-            // 투사체 이동 및 광역파 처리
+            // 투사체 이동 및 처리
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
                 p.life--;
@@ -324,18 +305,20 @@
                     const dist = player1.position.distanceTo(player2.position);
                     if (dist <= p.radius && dist >= p.radius - 2.5) {
                         hitEnemy(p.damage);
-                        player2.position.addScaledVector(forwardVec, 1.0);
+                        // 충격파는 고정된 상태이므로 밀쳐내지 않고 순수 대미지만 가함
                     }
                 } else {
+                    // 적이 고정되어 있으므로 투사체가 적을 향해 정확하게 비행
                     const currentDir = new THREE.Vector3().subVectors(player2.position, p.mesh.position).normalize();
-                    p.dir.lerp(currentDir, 0.1); 
-                    p.mesh.position.addScaledVector(p.dir, p.speed);
+                    p.mesh.position.addScaledVector(currentDir, p.speed);
                     p.mesh.lookAt(player2.position); 
 
                     const distance = p.mesh.position.distanceTo(player2.position);
-                    if (distance < 2.5) {
+                    if (distance < 2.2) {
                         hitEnemy(p.damage);
-                        if (p.type === 'grab') isGrabbed = true;
+                        if (p.type === 'grab') {
+                            isGrabbed = true; // 그랩 견인 활성화
+                        }
                         scene.remove(p.mesh);
                         projectiles.splice(i, 1);
                         continue;
@@ -348,7 +331,7 @@
                 }
             }
 
-            player2.rotation.y += 0.02;
+            player2.rotation.y += 0.01;
 
             renderer.render(scene, mainCamera);
             subRenderer.render(scene, subCamera);
@@ -360,7 +343,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 즉각 업데이트 후 루프 가동
         updateUI();
         animate(0);
     </script>
