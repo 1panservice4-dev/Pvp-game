@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 대전 게임 - 1인칭 & 3인칭 멀티뷰</title>
+    <title>3D 대전 게임 - 스킬 전면 개편</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #ui {
@@ -13,7 +13,6 @@
         }
         h3 { margin: 0 0 10px 0; color: #00ffcc; }
         .controls { font-size: 14px; line-height: 1.5; }
-        /* 좌측 하단 3인칭 서브 화면 스타일 */
         #sub-view {
             position: absolute; bottom: 20px; left: 20px;
             width: 250px; height: 180px;
@@ -27,90 +26,91 @@
 <body>
 
     <div id="ui">
-        <h3>1인칭 슈팅 & 탑다운 뷰</h3>
+        <h3>1인칭 액션 슈팅 (스킬 개편)</h3>
         <div class="controls">
             <b>내 이동:</b> 방향키 (↑, ↓, ←, →)<br>
-            <b>자동유도 스킬 (WASD):</b><br>
-            - W: 빨강 / A: 노랑 / S: 파랑 / D: 보라<br>
+            <b>[새로운 스킬 목록]</b><br>
+            - <span style="color: #ff9900;"><b>W: 그랩</b></span> (적을 내 앞으로 끌고 옴)<br>
+            - <span style="color: #ff3333;"><b>A: 칼 던지기</b></span> (빠른 단검 투척)<br>
+            - <span style="color: #33ccff;"><b>S: 베기</b></span> (전방에 거대한 검기 발사)<br>
+            - <span style="color: #cc33ff;"><b>D: 충격파</b></span> (내 주변 광역 방출)<br>
             <br>
-            <span style="color: #00ffcc;">* 메인: 내 캐릭터 시점 (1인칭 Lock-on)</span><br>
-            <span style="color: #ffcc00;">* 좌측 하단: 전장을 내려다보는 3인칭 뷰</span>
+            <span style="color: #00ffcc;">* 마우스로 화면을 한 번 클릭한 뒤 조작해 주세요!</span>
         </div>
     </div>
 
     <div id="sub-view"></div>
 
     <script>
-        // --- 1. 기본 셋팅 (씬, 렌더러 공유) ---
+        // --- 1. 기본 시스템 세팅 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0a16);
+        scene.background = new THREE.Color(0x050510);
 
-        // 메인 카메라 (1인칭 시점)
         const mainCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // 서브 카메라 (3인칭 탑다운 시점)
         const subCamera = new THREE.PerspectiveCamera(60, 250 / 180, 0.1, 1000);
-        subCamera.position.set(0, 22, 0); // 맵 위쪽에서 아래를 내려다봄
+        subCamera.position.set(0, 25, 0);
         subCamera.lookAt(0, 0, 0);
 
-        // 메인 렌더러
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 서브 렌더러 (좌측 하단용)
         const subRenderer = new THREE.WebGLRenderer({ antialias: true });
         subRenderer.setSize(250, 180);
-        document.getElementById('sub-view').appendChild(subRenderer.domElement);
+        document.getElementById('sub-view').appendChild(subRenderer.getPixelRatio ? subRenderer.domElement : subRenderer.domElement);
 
-        // 조명 설정
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        // 조명
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
-        directionalLight.position.set(10, 20, 10);
-        scene.add(directionalLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
 
-        // 바닥 격자 맵
-        const gridHelper = new THREE.GridHelper(50, 50, 0x00ffcc, 0x333333);
-        gridHelper.position.y = -0.5;
-        scene.add(gridHelper);
+        // 바닥 격자
+        const grid = new THREE.GridHelper(60, 60, 0x00ffcc, 0x222222);
+        grid.position.y = -0.5;
+        scene.add(grid);
 
         // --- 2. 캐릭터 생성 ---
-        // 플레이어 1 (내 캐릭터 - 초록 구체)
-        const p1Geometry = new THREE.SphereGeometry(0.7, 32, 32);
-        const p1Material = new THREE.MeshStandardMaterial({ color: 0x00ff88, roughness: 0.2, metalness: 0.5 });
-        const player1 = new THREE.Mesh(p1Geometry, p1Material);
-        player1.position.set(-8, 0.2, 0);
+        // 플레이어 1 (내 위치 표시용 - 인게임에선 1인칭이라 안 보이지만 3인칭 뷰에 보임)
+        const player1 = new THREE.Mesh(
+            new THREE.SphereGeometry(0.7, 32, 32),
+            new THREE.MeshStandardMaterial({ color: 0x00ff88, roughness: 0.2 })
+        );
+        player1.position.set(-10, 0.2, 0);
         scene.add(player1);
 
         // 플레이어 2 (적 캐릭터 - 붉은 상자)
-        const p2Geometry = new THREE.BoxGeometry(1.4, 1.4, 1.4);
-        const p2Material = new THREE.MeshStandardMaterial({ color: 0xff3366, roughness: 0.3 });
-        const player2 = new THREE.Mesh(p2Geometry, p2Material);
-        player2.position.set(8, 0.4, 0);
+        const player2 = new THREE.Mesh(
+            new THREE.BoxGeometry(1.5, 1.5, 1.5),
+            new THREE.MeshStandardMaterial({ color: 0xff3366, roughness: 0.2 })
+        );
+        player2.position.set(10, 0.4, 0);
         scene.add(player2);
 
-        // --- 3. 입력 제어 및 변수 (버그 원천 차단) ---
+        // --- 3. 입력 관리 (버그 완전 방지) ---
         const keys = {};
-        const skills = []; 
+        const projectiles = []; // 투사체 관리 배열
         const playerSpeed = 0.2;
-        const skillSpeed = 0.35; 
         let enemyTime = 0;
+        let isGrabbed = false; // 그랩 당하는 중인지 여부
 
-        // 대소문자 무관하게 감지하도록 전처리 수정
+        // 키 입력 씹힘 방지를 위한 통합 이벤트 리스너
         window.addEventListener('keydown', (e) => {
-            const keyStr = e.key.toLowerCase();
-            keys[e.key] = true; // 방향키 대응 (ArrowUp 등)
-            keys[keyStr] = true; // 소문자 강제 대응 (w,a,s,d 등)
-
-            // 버그 수정: 이벤트가 발생했을 때 즉각적이고 정확하게 색상을 찾아 쏩니다.
-            if (['w', 'a', 's', 'd'].includes(keyStr)) {
-                let color = 0xff3333; // w (빨강)
-                if (keyStr === 'a') color = 0xffcc00; // a (노랑)
-                if (keyStr === 's') color = 0x3399ff; // s (파랑)
-                if (keyStr === 'd') color = 0x9933ff; // d (보라)
-                fireSkill(color);
+            // 방향키나 WASD 입력 시 브라우저 스크롤/단축키 방지
+            if(['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(e.key.toLowerCase())) {
+                e.preventDefault(); 
             }
+
+            const keyStr = e.key.toLowerCase();
+            keys[e.key] = true; 
+            keys[keyStr] = true; 
+
+            // 즉시 스킬 발사 분기 처리
+            if (keyStr === 'w') useSkill('grab');
+            if (keyStr === 'a') useSkill('dagger');
+            if (keyStr === 's') useSkill('slash');
+            if (keyStr === 'd') useSkill('shockwave');
         });
         
         window.addEventListener('keyup', (e) => { 
@@ -118,97 +118,159 @@
             keys[e.key.toLowerCase()] = false;
         });
 
-        // --- 4. 자동유도 스킬 발사 함수 ---
-        function fireSkill(colorHex) {
-            const skillGeo = new THREE.SphereGeometry(0.3, 16, 16);
-            // 이펙트 효과를 위해 빛나는 머티리얼 사용
-            const skillMat = new THREE.MeshBasicMaterial({ color: colorHex });
-            const skillMesh = new THREE.Mesh(skillGeo, skillMat);
-            
-            // 내 위치에서 발사
-            skillMesh.position.copy(player1.position);
-            scene.add(skillMesh);
-            
-            skills.push({
-                mesh: skillMesh,
-                life: 150 // 지속 시간
-            });
+        // --- 4. 개별 스킬 로직 개편 ---
+        function useSkill(type) {
+            const toEnemy = new THREE.Vector3().subVectors(player2.position, player1.position).normalize();
+
+            if (type === 'grab') {
+                // W: 그랩 (노란색 긴 사슬 형태의 끈)
+                const grabGeo = new THREE.CylinderGeometry(0.1, 0.1, 4, 8);
+                grabGeo.rotateX(Math.PI / 2); // 앞을 보게 회전
+                const grabMat = new THREE.MeshBasicMaterial({ color: 0xff9900 });
+                const grabMesh = new THREE.Mesh(grabGeo, grabMat);
+                grabMesh.position.copy(player1.position);
+                scene.add(grabMesh);
+                
+                projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.6, life: 40 });
+
+            } else if (type === 'dagger') {
+                // A: 칼 던지기 (날카롭고 빠른 빨간색 원뿔)
+                const daggerGeo = new THREE.ConeGeometry(0.15, 1, 4);
+                daggerGeo.rotateX(Math.PI / 2);
+                const daggerMat = new THREE.MeshBasicMaterial({ color: 0xff3333 });
+                const daggerMesh = new THREE.Mesh(daggerGeo, daggerMat);
+                daggerMesh.position.copy(player1.position);
+                scene.add(daggerMesh);
+
+                projectiles.push({ type: 'dagger', mesh: daggerMesh, dir: toEnemy, speed: 0.8, life: 60 });
+
+            } else if (type === 'slash') {
+                // S: 베기 (전방으로 날아가는 거대한 하늘색 초승달 모양 검기)
+                const slashGeo = new THREE.RingGeometry(0.5, 2.5, 32, 1, 0, Math.PI); // 반원 모양
+                slashGeo.rotateX(-Math.PI / 2); // 바닥과 수평하게
+                const slashMat = new THREE.MeshBasicMaterial({ color: 0x33ccff, side: THREE.DoubleSide });
+                const slashMesh = new THREE.Mesh(slashGeo, slashMat);
+                slashMesh.position.copy(player1.position);
+                // 적을 바라보는 각도로 조절
+                slashMesh.lookAt(player2.position); 
+                scene.add(slashMesh);
+
+                projectiles.push({ type: 'slash', mesh: slashMesh, dir: toEnemy, speed: 0.4, life: 50 });
+
+            } else if (type === 'shockwave') {
+                // D: 충격파 (플레이어 주변으로 보라색 원이 넓어짐)
+                const waveGeo = new THREE.RingGeometry(0.1, 0.5, 32);
+                waveGeo.rotateX(-Math.PI / 2);
+                const waveMat = new THREE.MeshBasicMaterial({ color: 0xcc33ff, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+                const waveMesh = new THREE.Mesh(waveGeo, waveMat);
+                waveMesh.position.copy(player1.position);
+                waveMesh.position.y = 0.1; // 바닥에 살짝 띄움
+                scene.add(waveMesh);
+
+                projectiles.push({ type: 'shockwave', mesh: waveMesh, radius: 0.5, life: 30 });
+            }
+        }
+
+        // 피격 연출 함수
+        function hitEnemy() {
+            player2.material.color.setHex(0xffffff);
+            setTimeout(() => player2.material.color.setHex(0xff3366), 100);
         }
 
         // --- 5. 게임 메인 루프 ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // [1] 플레이어 이동 제어
+            // [1] 플레이어 이동 (방향키)
             if (keys['ArrowUp']) player1.position.z -= playerSpeed;
             if (keys['ArrowDown']) player1.position.z += playerSpeed;
             if (keys['ArrowLeft']) player1.position.x -= playerSpeed;
             if (keys['ArrowRight']) player1.position.x += playerSpeed;
 
-            // [2] 적 자동 8자 무빙 (유도 성능 테스트용)
-            enemyTime += 0.02;
-            player2.position.z = Math.sin(enemyTime * 2) * 5;
-            player2.position.x = 8 + Math.cos(enemyTime) * 3;
-
-            // [3] ★ 1인칭 시점 셋팅 (메인 카메라)
-            // 카메라를 내 캐릭터 정중앙 약간 위에 배치
-            mainCamera.position.copy(player1.position);
-            mainCamera.position.y += 0.5; 
-            // 적을 실시간 조준
-            mainCamera.lookAt(player2.position);
-
-            // [4] ★ 3인칭 서브 카메라 업데이트
-            // 전체 맵과 두 플레이어가 잘 보이도록 중심 고정
-            subCamera.position.set(0, 20, 0);
-            subCamera.lookAt(0, 0, 0);
-
-            // [5] 스킬 실시간 자동 유도 및 충돌 체크
-            for (let i = skills.length - 1; i >= 0; i--) {
-                const s = skills[i];
-                s.life--;
-
-                // 실시간 추적 벡터 계산
-                const targetDir = new THREE.Vector3();
-                targetDir.subVectors(player2.position, s.mesh.position).normalize();
-                
-                // 타겟을 향해 이동
-                s.mesh.position.addScaledVector(targetDir, skillSpeed);
-
-                // 충돌 감지
-                const distance = s.mesh.position.distanceTo(player2.position);
-                if (distance < 1.0) { 
-                    player2.material.color.setHex(0xffffff); // 피격 시 백화 현상
-                    setTimeout(() => player2.material.color.setHex(0xff3366), 80);
-                    
-                    scene.remove(s.mesh);
-                    skills.splice(i, 1);
-                    continue;
-                }
-
-                // 수명 만료
-                if (s.life <= 0) {
-                    scene.remove(s.mesh);
-                    skills.splice(i, 1);
+            // [2] 적 AI 무빙 (그랩에 당하는 중이 아닐 때만 8자 무빙)
+            if (!isGrabbed) {
+                enemyTime += 0.015;
+                player2.position.z = Math.sin(enemyTime * 2) * 6;
+                player2.position.x = 10 + Math.cos(enemyTime) * 4;
+            } else {
+                // 그랩 당할 때 내 앞으로 부드럽게 끌려옴
+                const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(new THREE.Vector3(2, 0, 0), 1);
+                player2.position.lerp(targetPos, 0.15);
+                if (player2.position.distanceTo(targetPos) < 0.5) {
+                    isGrabbed = false; // 풀려남
                 }
             }
 
-            // 그래픽 회전 요소
-            player2.rotation.x += 0.02;
+            // [3] 카메라 시점 셋팅
+            mainCamera.position.copy(player1.position);
+            mainCamera.position.y += 0.6; // 눈높이
+            mainCamera.lookAt(player2.position);
+
+            // [4] 스킬/투사체 로직 실시간 업데이트
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.life--;
+
+                if (p.type === 'shockwave') {
+                    // 충격파 전용: 사방으로 크기가 커짐
+                    p.radius += 0.3;
+                    p.mesh.geometry.dispose(); // 기존 기오메트리 메모리 해제
+                    p.mesh.geometry = new THREE.RingGeometry(p.radius - 0.2, p.radius, 32);
+                    p.mesh.geometry.rotateX(-Math.PI / 2);
+                    p.mesh.material.opacity -= 0.025; // 점점 투명해짐
+
+                    // 내 주변 광역 판정 (적과의 거리 계산)
+                    const dist = player1.position.distanceTo(player2.position);
+                    if (dist <= p.radius && dist >= p.radius - 1.0) {
+                        hitEnemy();
+                        // 적을 뒤로 밀쳐냄 (넉백)
+                        const pushDir = new THREE.Vector3().subVectors(player2.position, player1.position).normalize();
+                        player2.position.addScaledVector(pushDir, 0.5);
+                    }
+
+                } else {
+                    // 유도성 소폭 추가하여 타겟 방향 전진 (그랩, 칼, 베기)
+                    const currentDir = new THREE.Vector3().subVectors(player2.position, p.mesh.position).normalize();
+                    p.dir.lerp(currentDir, 0.05); // 자연스럽게 휘어지도록 유도 보정
+                    p.mesh.position.addScaledVector(p.dir, p.speed);
+                    p.mesh.lookAt(player2.position); // 투사체가 적을 바라보게
+
+                    // 충돌 체크
+                    const distance = p.mesh.position.distanceTo(player2.position);
+                    if (distance < 1.2) {
+                        hitEnemy();
+                        
+                        if (p.type === 'grab') {
+                            isGrabbed = true; // 그랩 상태 돌입
+                        }
+                        
+                        scene.remove(p.mesh);
+                        projectiles.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                // 수명 만료 처리
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            // 애니메이션 효과
             player2.rotation.y += 0.02;
 
-            // [6] ★ 듀얼 렌더링 (각각의 카메라로 화면을 그림)
-            renderer.render(scene, mainCamera);   // 메인 화면 (1인칭)
-            subRenderer.render(scene, subCamera); // 좌측 하단 (3인칭 탑다운)
+            // 렌더링
+            renderer.render(scene, mainCamera);
+            subRenderer.render(scene, subCamera);
         }
 
-        // 브라우저 리사이즈 대응
         window.addEventListener('resize', () => {
             mainCamera.aspect = window.innerWidth / window.innerHeight;
             mainCamera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 루프 시작
         animate();
     </script>
 </body>
