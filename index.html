@@ -3,34 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 대전 게임 - 입력 버그 완전 박멸 버전</title>
+    <title>3D 락온 배틀 아레나</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #050515; font-family: sans-serif; }
         
-        /* [중요] 게임 시작 유도 레이어 */
-        #start-screen {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(5, 5, 20, 0.95); display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 100; color: white;
-        }
-        #start-btn {
-            padding: 20px 50px; font-size: 24px; font-weight: bold; color: #000;
-            background: #00ffcc; border: none; border-radius: 10px; cursor: pointer;
-            box-shadow: 0 0 20px #00ffcc; transition: 0.2s; margin-top: 20px;
-        }
-        #start-btn:hover { transform: scale(1.1); background: #ffffff; box-shadow: 0 0 30px #ffffff; }
-
+        /* UI 레이아웃 */
         #ui {
             position: absolute; top: 10px; left: 10px; color: white;
             background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
-            pointer-events: none; z-index: 10; display: none; /* 시작 전엔 숨김 */
+            pointer-events: none; z-index: 10;
         }
         h3 { margin: 0 0 10px 0; color: #00ffcc; }
         .controls { font-size: 13px; line-height: 1.5; }
 
+        /* 상단 HP/MP 바 */
         #status-container {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            display: none; gap: 40px; background: rgba(0,0,0,0.6);
+            display: flex; gap: 40px; background: rgba(0,0,0,0.6);
             padding: 10px 25px; border-radius: 30px; border: 1px solid #444;
             z-index: 10; pointer-events: none; width: 500px; justify-content: space-between;
         }
@@ -38,59 +27,55 @@
         .status-box.right { align-items: flex-end; }
         .label { color: #aaa; font-size: 12px; margin-bottom: 3px; font-weight: bold; }
         .bar-bg { width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-bottom: 4px; }
-        .bar-fill { height: 100%; width: 100%; transition: width 0.1s ease; }
-        .hp-fill { background: #ff3366; }
+        .bar-fill { height: 100%; width: 100%; background: #ff3366; }
         .mp-fill { background: #3399ff; }
 
+        /* 좌측 하단 3인칭 미니맵 */
         #sub-view {
             position: absolute; bottom: 20px; left: 20px;
             width: 250px; height: 180px;
             border: 2px solid #00ffcc; border-radius: 6px;
             box-shadow: 0 0 15px rgba(0,255,204,0.5);
-            pointer-events: none; z-index: 5; display: none;
+            pointer-events: none; z-index: 5;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-    <div id="start-screen">
-        <h1 style="color: #00ffcc; margin: 0;">LOCK-ON 3D BATTLE Arena</h1>
-        <p style="color: #ccc; font-size: 16px;">한글/영문 키보드 상태에 상관없이 작동하도록 조작계 패치가 완료되었습니다.</p>
-        <button id="start-btn">클릭하여 게임 시작</button>
-    </div>
-
     <div id="status-container">
         <div class="status-box">
             <div class="label" style="color: #00ff88;">PLAYER (나)</div>
-            <div class="bar-bg"><div id="p1-hp" class="bar-fill hp-fill"></div></div>
+            <div class="bar-bg"><div id="p1-hp" class="bar-fill"></div></div>
             <div class="bar-bg" style="height: 8px;"><div id="p1-mp" class="bar-fill mp-fill"></div></div>
         </div>
         <div class="status-box right">
             <div class="label" style="color: #ff3366;">ENEMY (적)</div>
-            <div class="bar-bg"><div id="p2-hp" class="bar-fill hp-fill"></div></div>
+            <div class="bar-bg"><div id="p2-hp" class="bar-fill"></div></div>
             <div class="bar-bg" style="height: 8px;"><div id="p2-mp" class="bar-fill mp-fill"></div></div>
         </div>
     </div>
 
     <div id="ui">
-        <h3>락온 배틀 (물리 키 시스템 적용)</h3>
+        <h3>락온 배틀 (즉시 실행 버전)</h3>
         <div class="controls">
-            <b>[방향키]</b> 적 기준 이동 (↑돌진, ↓후진, ←→횡공전)<br>
-            <b>[스킬 - 물리 키 입력 대응완료]</b><br>
-            - <span style="color: #ff9900;"><b>W 키 (그랩):</b></span> MP 20 소모 / 적 견인<br>
-            - <span style="color: #ff3333;"><b>A 키 (단검):</b></span> MP 15 소모 / 미사일 투척<br>
-            - <span style="color: #33ccff;"><b>S 키 (베기):</b></span> MP 30 소모 / 화면 검기 분출<br>
-            - <span style="color: #cc33ff;"><b>D 키 (충격파):</b></span> MP 25 소모 / 내 주변 광역 폭발<br>
+            <b>[방향키]</b> 적 기준 이동 (↑돌진, ↓후진, ←→사이드스텝)<br>
+            <b>[스킬 단축키 - WASD]</b><br>
+            - <span style="color: #ff9900;"><b>W (그랩):</b></span> MP 20 / 적 끌어당기기<br>
+            - <span style="color: #ff3333;"><b>A (단검):</b></span> MP 15 / 고속 칼 투척<br>
+            - <span style="color: #33ccff;"><b>S (베기):</b></span> MP 30 / 대형 검기 분출<br>
+            - <span style="color: #cc33ff;"><b>D (충격파):</b></span> MP 25 / 주변 광역 폭발<br>
+            <br>
+            <span style="color: #00ffcc;">※ 화면이 안 보일 경우 마우스로 화면을 한 번 클릭해 주세요!</span>
         </div>
     </div>
 
     <div id="sub-view"></div>
 
     <script>
-        // --- 1. 엔진 기틀 선언 ---
+        // --- 1. Three.js 기본 세팅 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x04040d);
+        scene.background = new THREE.Color(0x050515);
 
         const mainCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const subCamera = new THREE.PerspectiveCamera(60, 250 / 180, 0.1, 1000);
@@ -105,17 +90,19 @@
         subRenderer.setSize(250, 180);
         document.getElementById('sub-view').appendChild(subRenderer.domElement);
 
+        // 조명
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
         dirLight.position.set(10, 30, 10);
         scene.add(dirLight);
 
+        // 바닥 격자
         const grid = new THREE.GridHelper(60, 60, 0x00ffcc, 0x222222);
         grid.position.y = -0.5;
         scene.add(grid);
 
-        // --- 2. 상태 수치 데이터 ---
+        // --- 2. 게임 데이터 설정 ---
         const p1Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
         const p2Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
 
@@ -133,7 +120,7 @@
             document.getElementById('p2-mp').style.width = `${Math.max(0, p2Stats.mp)}%`;
         }
 
-        // --- 3. 액터 배치 ---
+        // --- 3. 캐릭터 생성 ---
         const player1 = new THREE.Mesh(
             new THREE.SphereGeometry(0.8, 32, 32),
             new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x003311 })
@@ -148,49 +135,35 @@
         player2.position.set(12, 1.0, 0);
         scene.add(player2);
 
+        // 조준 가이드라인 선
         const lineMat = new THREE.LineBasicMaterial({ color: 0x555555 });
         const lineGeo = new THREE.BufferGeometry().setFromPoints([player1.position, player2.position]);
         const guideLine = new THREE.Line(lineGeo, lineMat);
         scene.add(guideLine);
 
-        // --- 4. ★ 초강력 인풋 시스템 (e.code 도입으로 버그 완전 봉인) ---
+        // --- 4. 조작 입력 제어 (물리 키 고정) ---
         const keys = {};
         const projectiles = []; 
         const playerSpeed = 0.22; 
         let enemyTime = 0;
-        let isGrabbed = false; 
-        let gameActive = false;
+        let isGrabbed = false;
 
-        // 시작 버튼 이벤트 등록 및 포커스 선점
-        document.getElementById('start-btn').addEventListener('click', () => {
-            document.getElementById('start-screen').style.display = 'none';
-            document.getElementById('ui').style.display = 'block';
-            document.getElementById('status-container').style.display = 'flex';
-            document.getElementById('sub-view').style.display = 'block';
-            
-            window.focus(); // 윈도우 창 강제 포커스 확보
-            gameActive = true;
-        });
+        // 브라우저가 창을 열자마자 포커스를 잡도록 유도
+        window.focus();
+        window.addEventListener('click', () => { window.focus(); });
 
         window.addEventListener('keydown', (e) => {
-            if (!gameActive) return;
-
-            // 브라우저 윈도우 기능키 강제 제어권 무효화
             if(['arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase()) || ['keyw','keya','keys','keyd'].includes(e.code.toLowerCase())) {
                 e.preventDefault(); 
             }
 
-            // 방향키는 기존 key 시스템 유지
             keys[e.key] = true; 
+            keys[e.code] = true; // 물리 배열 배치 저장
 
-            // ★ 핵심 패치: 한글 입력기 상태에서도 키보드 원판 격자 배열을 가로채는 e.code 활용
-            const codeStr = e.code; 
-            keys[codeStr] = true;
-
-            if (codeStr === 'KeyW') useSkill('grab');
-            if (codeStr === 'KeyA') useSkill('dagger');
-            if (codeStr === 'KeyS') useSkill('slash');
-            if (codeStr === 'KeyD') useSkill('shockwave');
+            if (e.code === 'KeyW') useSkill('grab');
+            if (e.code === 'KeyA') useSkill('dagger');
+            if (e.code === 'KeyS') useSkill('slash');
+            if (e.code === 'KeyD') useSkill('shockwave');
         });
         
         window.addEventListener('keyup', (e) => { 
@@ -198,7 +171,7 @@
             keys[e.code] = false;
         });
 
-        // --- 5. 스킬 생성 시스템 ---
+        // --- 5. 스킬 발사 처리 ---
         function useSkill(type) {
             const data = SKILL_DATA[type];
             if (p1Stats.mp < data.mpCost) return; 
@@ -207,7 +180,6 @@
             updateUI();
 
             const toEnemy = new THREE.Vector3().subVectors(player2.position, player1.position).normalize();
-            // 카메라와 겹치지 않게 '내 위치 전방 2유닛 앞'에서 대형 오브젝트 투하
             const spawnPos = new THREE.Vector3().copy(player1.position).addScaledVector(toEnemy, 2.0);
             spawnPos.y = 1.0; 
 
@@ -264,14 +236,13 @@
             }
         }
 
-        // --- 6. 렌더 애니메이션 루프 ---
+        // --- 6. 메인 업데이트 루프 ---
         let lastRegenTime = 0;
 
         function animate(timestamp) {
             requestAnimationFrame(animate);
-            if (!gameActive) return;
 
-            // 자연 마나 틱 회복
+            // 마나 자동 회복 회로
             if (timestamp - lastRegenTime > 200) {
                 if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + 1.5);
                 if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 1);
@@ -279,25 +250,25 @@
                 lastRegenTime = timestamp;
             }
 
-            // 방향 축 연산
+            // 적 기준 방향 벡터 연산
             const forwardVec = new THREE.Vector3().subVectors(player2.position, player1.position);
             const distanceToEnemy = forwardVec.length();
             forwardVec.normalize();
             const rightVec = new THREE.Vector3().crossVectors(forwardVec, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // 이동 처리
+            // 방향키 조작 반응
             if (keys['ArrowUp'] && distanceToEnemy > 3.5) player1.position.addScaledVector(forwardVec, playerSpeed);
             if (keys['ArrowDown']) player1.position.addScaledVector(forwardVec, -playerSpeed);
             if (keys['ArrowLeft']) player1.position.addScaledVector(rightVec, playerSpeed);
             if (keys['ArrowRight']) player1.position.addScaledVector(rightVec, -playerSpeed);
 
-            // 보스 인공지능 패턴
+            // 적 AI 패턴 
             if (!isGrabbed) {
                 enemyTime += 0.015;
                 player2.position.z = Math.sin(enemyTime * 1.5) * 8;
                 player2.position.x = 12 + Math.cos(enemyTime) * 4;
 
-                // 근접 시 보라색 방출 반격
+                // 근접 반격기 작동
                 if (distanceToEnemy < 6.5 && Math.random() < 0.015 && p2Stats.mp >= 25) {
                     p2Stats.mp -= 25;
                     const eWaveGeo = new THREE.RingGeometry(0.5, 6.5, 32);
@@ -324,13 +295,13 @@
                 if (player2.position.distanceTo(targetPos) < 1.8) isGrabbed = false;
             }
 
-            // 가이드 빔 갱신
+            // 가이드라인 조준선 연동
             const positions = guideLine.geometry.attributes.position.array;
             positions[0] = player1.position.x; positions[1] = player1.position.y + 0.5; positions[2] = player1.position.z;
             positions[3] = player2.position.x; positions[4] = player2.position.y; positions[5] = player2.position.z;
             guideLine.geometry.attributes.position.needsUpdate = true;
 
-            // 시점 처리
+            // 시점 락온 고정
             mainCamera.position.copy(player1.position);
             mainCamera.position.y += 1.3; 
             mainCamera.lookAt(player2.position);
@@ -338,7 +309,7 @@
             subCamera.position.set(0, 35, 0);
             subCamera.lookAt(0, 0, 0);
 
-            // 투사체 로직 전개
+            // 투사체 이동 및 광역파 처리
             for (let i = projectiles.length - 1; i >= 0; i--) {
                 const p = projectiles[i];
                 p.life--;
@@ -389,7 +360,9 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // 즉각 업데이트 후 루프 가동
         updateUI();
+        animate(0);
     </script>
 </body>
 </html>
