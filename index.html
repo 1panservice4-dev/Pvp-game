@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 아레나 - 빌드 조합 & 마나 가중치 패치</title>
+    <title>3D 락온 아레나 - 전체 기능 통합본</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; user-select: none; color: white; }
         
@@ -34,7 +34,7 @@
         /* 하단 바 배치 */
         .lobby-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: auto; }
         
-        /* 간략화된 세팅 버튼 */
+        /* 간략화된 하단 중앙 세팅 버튼 */
         .btn-enter-select { 
             background: rgba(0, 255, 204, 0.1); border: 2px solid #00ffcc; color: #00ffcc; 
             border-radius: 8px; width: 220px; height: 55px; font-size: 16px; font-weight: bold; 
@@ -44,7 +44,7 @@
 
         /* [3] 독립형 캐릭터/무기 조합 선택 화면 */
         #char-select-screen {
-            background: rgba(5, 5, 20, 0.95);
+            background: rgba(5, 5, 20, 0.98);
             padding: 50px; box-sizing: border-box; justify-content: center; align-items: center;
             z-index: 150;
         }
@@ -115,7 +115,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">FREE CROSS-COMBINATION SYSTEM</div>
+        <div class="game-subtitle">INTEGRATED COMBINATION SYSTEM</div>
         <button class="btn" onclick="changeScene('lobby')">PRESS TO START</button>
     </div>
 
@@ -177,7 +177,7 @@
                 </div>
             </div>
 
-            <button class="btn btn-complete" onclick="confirmSelection()">조합 조합 완료</button>
+            <button class="btn btn-complete" onclick="confirmSelection()">조합 완료</button>
         </div>
     </div>
 
@@ -208,7 +208,6 @@
     </div>
 
     <script>
-        // 전역 공통 무기 마스터 데이터베이스 (어느 캐릭터든 귀속되지 않고 범용 장착 가능)
         const COMMON_WEAPON_POOL = [
             { id: "w_plasma", name: "플라즈마 스파이크 (Plasma Sword)", dmgBonus: 6, color: 0x00ffcc },
             { id: "w_laser",  name: "헤비 레이저포 (Laser Blaster)",   dmgBonus: 15, color: 0x00ff44 },
@@ -216,7 +215,6 @@
             { id: "w_shield", name: "타이탄 요새방패 (Titan Shield)",   dmgBonus: 4,  color: 0xffaa00 }
         ];
 
-        // 캐릭터 데이터셋 (고유 스탯 및 마나 충전 메커니즘 계수 설계)
         const CHAR_DB = {
             avenger:  { name: "어벤저", hp: 100, mp: 100, spd: 0.22, color: 0x00ff88, regenInterval: 200, regenAmount: 2 },
             slayer:   { name: "슬레이어", hp: 85,  mp: 120, spd: 0.28, color: 0x00d2ff, regenInterval: 150, regenAmount: 3 },
@@ -235,7 +233,6 @@
             player1.material.color.setHex(CHAR_DB[id].color);
         }
 
-        // 공통 무기 선택 리스트 렌더러
         function renderCommonWeapons() {
             const container = document.getElementById('select-screen-weapon-container');
             container.innerHTML = "";
@@ -281,7 +278,7 @@
             document.getElementById('game-hud').classList.add('hidden');
 
             if (sceneName === 'start') {
-                document.getElementById('start-screen').remove('hidden');
+                document.getElementById('start-screen').classList.remove('hidden');
             } else if (sceneName === 'lobby') {
                 document.getElementById('lobby-screen').classList.remove('hidden');
             } else if (sceneName === 'char-select') {
@@ -315,7 +312,7 @@
             }
         }
 
-        // --- Three.js 그래픽 엔진 설계 ---
+        // --- Three.js 그래픽 코어 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050515);
 
@@ -446,11 +443,10 @@
             const isGameActive = !document.getElementById('game-hud').classList.contains('hidden');
 
             if (isGameActive) {
-                // 핵심 요구 사항: 캐릭터 고유 속성 데이터에 기인한 가변적 MP 젠 타임 루프 연산
                 const currentCharData = CHAR_DB[selectedChar];
-                if (timestamp - lastRegenTime > currentCharData.interval ?? currentCharData.regenInterval) {
+                if (timestamp - lastRegenTime > currentCharData.regenInterval) {
                     if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + currentCharData.regenAmount);
-                    if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 2); // 상대 적은 기본값 젠
+                    if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 2);
                     updateUI(); 
                     lastRegenTime = timestamp;
                 }
@@ -517,7 +513,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 초기 빌드 세팅 가동
+        // 엔진 이니셜라이즈 세팅
         processSelectChar('avenger');
         confirmSelection();
         changeScene('start');
