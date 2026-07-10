@@ -3,14 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 배틀 아레나 - 좌우 조작 패치 완료</title>
+    <title>3D 락온 배틀 아레나 - 시스템 통합</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050515; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #050515; font-family: 'Malgun Gothic', sans-serif; user-select: none; }
         
+        /* --- 공통 풀스크린 오버레이 스크린 --- */
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100; transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .hidden { opacity: 0; pointer-events: none; transform: scale(0.95); }
+
+        /* 1. 시작 화면 스타일 */
+        #start-screen {
+            background: radial-gradient(circle, #101030 0%, #020208 100%);
+        }
+        .game-title {
+            font-size: 56px; color: #00ffcc; text-shadow: 0 0 20px rgba(0,255,204,0.6);
+            margin-bottom: 10px; font-weight: 900; letter-spacing: 2px;
+        }
+        .game-subtitle { font-size: 18px; color: #888; margin-bottom: 50px; }
+        
+        /* 2. 로비 화면 스타일 */
+        #lobby-screen {
+            background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+        }
+        .lobby-container {
+            width: 800px; background: rgba(255,255,255,0.03); border: 1px solid rgba(0,255,204,0.2);
+            border-radius: 16px; padding: 40px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            display: flex; gap: 40px; backdrop-filter: blur(10px);
+        }
+        .lobby-panel { flex: 1; display: flex; flex-direction: column; }
+        .lobby-title { font-size: 32px; color: #fff; margin: 0 0 25px 0; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }
+        .stat-item { display: flex; justify-content: space-between; margin-bottom: 15px; color: #ccc; font-size: 16px; }
+        .stat-val { color: #00ffcc; font-weight: bold; }
+
+        /* 공통 버튼 스타일 */
+        .btn {
+            padding: 15px 40px; font-size: 18px; font-weight: bold; color: #050515;
+            background: #00ffcc; border: none; border-radius: 30px; cursor: pointer;
+            box-shadow: 0 0 15px rgba(0,255,204,0.4); transition: all 0.2s;
+        }
+        .btn:hover { background: #fff; box-shadow: 0 0 25px rgba(255,255,255,0.8); transform: translateY(-2px); }
+        .btn-ready { width: 100%; margin-top: auto; padding: 20px; font-size: 22px; background: #ff3366; color: white; box-shadow: 0 0 15px rgba(255,51,102,0.4); }
+        .btn-ready:hover { background: #ff5588; box-shadow: 0 0 25px rgba(255,85,136,0.8); }
+
+        /* 3. 인게임 HUD 스타일 */
+        #game-hud { transition: opacity 0.5s; z-index: 10; pointer-events: none; }
         #ui {
             position: absolute; top: 10px; left: 10px; color: white;
             background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
-            pointer-events: none; z-index: 10;
         }
         h3 { margin: 0 0 10px 0; color: #00ffcc; }
         .controls { font-size: 13px; line-height: 1.5; }
@@ -18,8 +61,7 @@
         #status-container {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
             display: flex; gap: 40px; background: rgba(0,0,0,0.6);
-            padding: 10px 25px; border-radius: 30px; border: 1px solid #444;
-            z-index: 10; pointer-events: none; width: 500px; justify-content: space-between;
+            padding: 10px 25px; border-radius: 30px; border: 1px solid #444; width: 500px; justify-content: space-between;
         }
         .status-box { display: flex; flex-direction: column; width: 220px; }
         .status-box.right { align-items: flex-end; }
@@ -29,45 +71,96 @@
         .mp-fill { background: #3399ff; }
 
         #sub-view {
-            position: absolute; bottom: 20px; left: 20px;
-            width: 250px; height: 180px;
-            border: 2px solid #00ffcc; border-radius: 6px;
-            box-shadow: 0 0 15px rgba(0,255,204,0.5);
-            pointer-events: none; z-index: 5;
+            position: absolute; bottom: 20px; left: 20px; width: 250px; height: 180px;
+            border: 2px solid #00ffcc; border-radius: 6px; box-shadow: 0 0 15px rgba(0,255,204,0.5);
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-    <div id="status-container">
-        <div class="status-box">
-            <div class="label" style="color: #00ff88;">PLAYER (나)</div>
-            <div class="bar-bg"><div id="p1-hp" class="bar-fill"></div></div>
-            <div class="bar-bg" style="height: 8px;"><div id="p1-mp" class="bar-fill mp-fill"></div></div>
-        </div>
-        <div class="status-box right">
-            <div class="label" style="color: #ff3366;">ENEMY (적 - 고정됨)</div>
-            <div class="bar-bg"><div id="p2-hp" class="bar-fill"></div></div>
-            <div class="bar-bg" style="height: 8px;"><div id="p2-mp" class="bar-fill mp-fill"></div></div>
+    <div id="start-screen" class="screen">
+        <div class="game-title">ARENA LOCK-ON</div>
+        <div class="game-subtitle">3D 그랩 & 배틀 시뮬레이터</div>
+        <button class="btn" onclick="changeScene('lobby')">게임 시작</button>
+    </div>
+
+    <div id="lobby-screen" class="screen hidden">
+        <div class="lobby-container">
+            <div class="lobby-panel">
+                <div class="lobby-title">내 캐릭터 정보</div>
+                <div class="stat-item"><span>클래스</span><span class="stat-val">어벤저 (Avenger)</span></div>
+                <div class="stat-item"><span>최대 체력 (HP)</span><span class="stat-val">100</span></div>
+                <div class="stat-item"><span>최대 마나 (MP)</span><span class="stat-val">100</span></div>
+                <div class="stat-item"><span>이동 속도</span><span class="stat-val">정상</span></div>
+                <div class="stat-item"><span>특수 기술</span><span class="stat-val">완벽한 그랩 (W)</span></div>
+            </div>
+            <div class="lobby-panel" style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 40px;">
+                <div class="lobby-title">매치메이킹</div>
+                <div class="stat-item"><span>현재 지역</span><span class="stat-val" style="color:#fff;">아시아 서버</span></div>
+                <div class="stat-item"><span>훈련 상대</span><span class="stat-val" style="color:#ff3366;">훈련용 고정 봇</span></div>
+                <p style="color: #666; font-size: 13px; line-height: 1.6; margin-top: 20px;">
+                    ※ 전투 도중 <b style="color:#00ffcc;">[ESC]</b> 키를 누르면 언제든지 로비 화면으로 무사히 대피할 수 있습니다.
+                </p>
+                <button class="btn btn-ready" onclick="changeScene('game')">전 투 시 작</button>
+            </div>
         </div>
     </div>
 
-    <div id="ui">
-        <h3>락온 배틀 (좌우 조작 정상화 버전)</h3>
-        <div class="controls">
-            <b>[방향키]</b> 적 기준 이동 (<span style="color: #00ffcc;"><b>← 왼쪽, → 오른쪽 정상 작동</b></span>)<br>
-            <b>[특수 액션]</b><br>
-            - Spacebar: 점프 (방향 조합 가능)<br>
-            - Shift 키: 대시 구르기 (방향 조합 가능)<br>
-            <b>[스킬 단축키 - WASD]</b><br>
-            - W (그랩) / A (단검) / S (베기) / D (충격파)<br>
+    <div id="game-hud" class="hidden">
+        <div id="status-container">
+            <div class="status-box">
+                <div class="label" style="color: #00ff88;">PLAYER (나)</div>
+                <div class="bar-bg"><div id="p1-hp" class="bar-fill"></div></div>
+                <div class="bar-bg" style="height: 8px;"><div id="p1-mp" class="bar-fill mp-fill"></div></div>
+            </div>
+            <div class="status-box right">
+                <div class="label" style="color: #ff3366;">ENEMY (적 - 고정됨)</div>
+                <div class="bar-bg"><div id="p2-hp" class="bar-fill"></div></div>
+                <div class="bar-bg" style="height: 8px;"><div id="p2-mp" class="bar-fill mp-fill"></div></div>
+            </div>
         </div>
-    </div>
 
-    <div id="sub-view"></div>
+        <div id="ui">
+            <h3>락온 아레나 배틀존</h3>
+            <div class="controls">
+                <b>[방향키]</b> 적 기준 이동 (← 왼쪽, → 오른쪽 패치 완료)<br>
+                <b>[특수 액션]</b> Spacebar: 점프 / Shift: 구르기<br>
+                <b>[스킬 단축키]</b> W (그랩) / A (단검) / S (베기) / D (충격파)<br>
+                <b style="color: #ff3366;">[ESC] 로비로 나가기</b>
+            </div>
+        </div>
+        <div id="sub-view"></div>
+    </div>
 
     <script>
+        // --- 씬 관리 시스템 ---
+        let currentScene = 'start'; // 'start', 'lobby', 'game'
+
+        function changeScene(sceneName) {
+            currentScene = sceneName;
+            
+            // UI 화면 토글 처리
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('game-hud').classList.add('hidden');
+
+            if (sceneName === 'start') {
+                document.getElementById('start-screen').classList.remove('hidden');
+            } else if (sceneName === 'lobby') {
+                document.getElementById('lobby-screen').classList.remove('hidden');
+            } else if (sceneName === 'game') {
+                document.getElementById('game-hud').classList.remove('hidden');
+                // 게임 진입 시 위치 리셋 및 상태 초기화
+                player1.position.set(-10, 0.5, 0);
+                player2.position.set(10, 1.0, 0);
+                p1Stats.hp = 100; p1Stats.mp = 100;
+                p2Stats.hp = 100; p2Stats.mp = 100;
+                isGrabbed = false; isRolling = false;
+                updateUI();
+            }
+        }
+
         // --- 1. Three.js 기본 세팅 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050515);
@@ -144,19 +237,23 @@
         const jumpForce = 0.35;    
         let isGrounded = true;     
 
-        // 구르기 전용 변수
         let isRolling = false;      
         let rollFrames = 0;         
         const rollDuration = 18;    
         const rollSpeed = 0.55;     
         let rollDirection = new THREE.Vector3(); 
 
-        window.focus();
-        window.addEventListener('click', () => { window.focus(); });
-
         window.addEventListener('keydown', (e) => {
-            const codeStr = e.code.toLowerCase();
+            // [ESC] 키 입력 시 즉시 로비로 탈출
+            if (e.key === 'Escape') {
+                changeScene('lobby');
+                return;
+            }
 
+            // 인게임 시인이 아닐 때는 인게임 키 조작 잠금
+            if (currentScene !== 'game') return;
+
+            const codeStr = e.code.toLowerCase();
             if(['arrowup','arrowdown','arrowleft','arrowright','space'].includes(codeStr)) {
                 e.preventDefault(); 
             }
@@ -184,21 +281,18 @@
             keys[e.code] = false;
         });
 
-        // 구르기 방향 산출 (좌우 반전 패치 적용)
         function startRoll() {
             const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position);
             moveForward.y = 0;
             moveForward.normalize();
-            
-            // 패치 포인트: 오른손 법칙 크로스곱 기준 좌우 정렬 정상화
             const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
             let targetDir = new THREE.Vector3(0, 0, 0);
 
             if (keys['ArrowUp']) targetDir.add(moveForward);
             if (keys['ArrowDown']) targetDir.addScaledVector(moveForward, -1);
-            if (keys['ArrowLeft']) targetDir.addScaledVector(moveRight, -1); // ← 왼쪽 이동 시 역벡터 적용
-            if (keys['ArrowRight']) targetDir.add(moveRight);                 // → 오른쪽 이동 시 정벡터 적용
+            if (keys['ArrowLeft']) targetDir.addScaledVector(moveRight, -1); 
+            if (keys['ArrowRight']) targetDir.add(moveRight);                 
 
             if (targetDir.lengthSq() === 0) {
                 targetDir.copy(moveForward);
@@ -232,7 +326,6 @@
                 grabMesh.position.copy(spawnPos);
                 scene.add(grabMesh);
                 projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.6, life: 60, damage: data.damage });
-
             } else if (type === 'dagger') {
                 const daggerGeo = new THREE.ConeGeometry(0.6, 3.0, 16);
                 daggerGeo.rotateX(Math.PI / 2);
@@ -240,7 +333,6 @@
                 daggerMesh.position.copy(spawnPos);
                 scene.add(daggerMesh);
                 projectiles.push({ type: 'dagger', mesh: daggerMesh, dir: toEnemy, speed: 0.75, life: 60, damage: data.damage });
-
             } else if (type === 'slash') {
                 const slashGeo = new THREE.RingGeometry(1.5, 6.0, 32, 1, 0, Math.PI); 
                 slashGeo.rotateX(-Math.PI / 3.5); 
@@ -249,7 +341,6 @@
                 slashMesh.lookAt(player2.position); 
                 scene.add(slashMesh);
                 projectiles.push({ type: 'slash', mesh: slashMesh, dir: toEnemy, speed: 0.38, life: 60, damage: data.damage });
-
             } else if (type === 'shockwave') {
                 const waveGeo = new THREE.RingGeometry(0.5, 2.0, 32);
                 waveGeo.rotateX(-Math.PI / 2);
@@ -284,114 +375,114 @@
         function animate(timestamp) {
             requestAnimationFrame(animate);
 
-            if (timestamp - lastRegenTime > 200) {
-                if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + 1.5);
-                if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 1);
-                updateUI();
-                lastRegenTime = timestamp;
-            }
+            // 마나 재생 및 물리 연산은 인게임 상태일 때만 처리합니다.
+            if (currentScene === 'game') {
+                if (timestamp - lastRegenTime > 200) {
+                    if (p1Stats.mp < p1Stats.maxMp) p1Stats.mp = Math.min(p1Stats.maxMp, p1Stats.mp + 1.5);
+                    if (p2Stats.mp < p2Stats.maxMp) p2Stats.mp = Math.min(p2Stats.maxMp, p2Stats.mp + 1);
+                    updateUI();
+                    lastRegenTime = timestamp;
+                }
 
-            const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position);
-            moveForward.y = 0; 
-            const distanceToEnemy = moveForward.length();
-            moveForward.normalize(); 
-            const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
+                const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position);
+                moveForward.y = 0; 
+                const distanceToEnemy = moveForward.length();
+                moveForward.normalize(); 
+                const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // ★ 일반 이동 조작계 (좌우 반전 디버깅 패치 적용)
-            if (!isRolling && !isGrabbed) {
-                player1.scale.set(1.0, 1.0, 1.0); 
-
-                if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
-                if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
-                if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed); // ← 누르면 왼쪽(-방향)으로 이동
-                if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);  // → 누르면 오른쪽(+방향)으로 이동
-            } 
-            else if (isRolling) {
-                rollFrames++;
-                player1.position.addScaledVector(rollDirection, rollSpeed);
-                player1.rotation.x += 0.3;
-                player1.rotation.z += 0.2;
-                player1.scale.y = 0.6; 
-
-                if (rollFrames >= rollDuration) {
-                    isRolling = false;
+                if (!isRolling && !isGrabbed) {
                     player1.scale.set(1.0, 1.0, 1.0); 
+                    if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
+                    if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
+                    if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed); 
+                    if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);  
+                } 
+                else if (isRolling) {
+                    rollFrames++;
+                    player1.position.addScaledVector(rollDirection, rollSpeed);
+                    player1.rotation.x += 0.3;
+                    player1.rotation.z += 0.2;
+                    player1.scale.y = 0.6; 
+
+                    if (rollFrames >= rollDuration) {
+                        isRolling = false;
+                        player1.scale.set(1.0, 1.0, 1.0); 
+                    }
                 }
-            }
 
-            // 점프 가속 연산
-            if (!isGrounded) {
-                p1VelocityY += gravity; 
-                player1.position.y += p1VelocityY;
-
-                if (player1.position.y <= 0.5) {
-                    player1.position.y = 0.5;
-                    p1VelocityY = 0;
-                    isGrounded = true;
+                if (!isGrounded) {
+                    p1VelocityY += gravity; 
+                    player1.position.y += p1VelocityY;
+                    if (player1.position.y <= 0.5) {
+                        player1.position.y = 0.5;
+                        p1VelocityY = 0;
+                        isGrounded = true;
+                    }
                 }
-            }
 
-            // 그랩 견인 연산
-            if (isGrabbed) {
-                const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(moveForward, 1.8);
-                targetPos.y = 1.0; 
-                player2.position.lerp(targetPos, 0.25);
-                if (player2.position.distanceTo(targetPos) < 0.2) {
-                    isGrabbed = false; 
+                if (isGrabbed) {
+                    const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(moveForward, 1.8);
+                    targetPos.y = 1.0; 
+                    player2.position.lerp(targetPos, 0.25);
+                    if (player2.position.distanceTo(targetPos) < 0.2) {
+                        isGrabbed = false; 
+                    }
                 }
+
+                const positions = guideLine.geometry.attributes.position.array;
+                positions[0] = player1.position.x; positions[1] = player1.position.y; positions[2] = player1.position.z;
+                positions[3] = player2.position.x; positions[4] = player2.position.y; positions[5] = player2.position.z;
+                guideLine.geometry.attributes.position.needsUpdate = true;
+
+                mainCamera.position.copy(player1.position);
+                mainCamera.position.y += 1.3; 
+                mainCamera.lookAt(player2.position);
+
+                // 투사체 처리
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const p = projectiles[i];
+                    p.life--;
+
+                    if (p.type === 'shockwave') {
+                        p.radius += 0.45;
+                        p.mesh.geometry.dispose(); 
+                        p.mesh.geometry = new THREE.RingGeometry(p.radius - 0.6, p.radius, 32);
+                        p.mesh.geometry.rotateX(-Math.PI / 2);
+                        p.mesh.material.opacity -= 0.035;
+
+                        const dist = player1.position.distanceTo(player2.position);
+                        if (dist <= p.radius && dist >= p.radius - 2.5) {
+                            hitEnemy(p.damage);
+                        }
+                    } else {
+                        const currentDir = new THREE.Vector3().subVectors(player2.position, p.mesh.position).normalize();
+                        p.mesh.position.addScaledVector(currentDir, p.speed);
+                        p.mesh.lookAt(player2.position); 
+
+                        const distance = p.mesh.position.distanceTo(player2.position);
+                        if (distance < 2.2) {
+                            hitEnemy(p.damage);
+                            if (p.type === 'grab') isGrabbed = true;
+                            scene.remove(p.mesh);
+                            projectiles.splice(i, 1);
+                            continue;
+                        }
+                    }
+
+                    if (p.life <= 0) {
+                        scene.remove(p.mesh);
+                        projectiles.splice(i, 1);
+                    }
+                }
+            } else {
+                // 시작/로비 화면일 때는 카메라가 맵 주위를 가볍게 회전하는 보너스 연출
+                const time = timestamp * 0.0003;
+                mainCamera.position.set(Math.sin(time) * 20, 10, Math.cos(time) * 20);
+                mainCamera.lookAt(0, 0, 0);
             }
-
-            // 가이드라인 조준선 연동
-            const positions = guideLine.geometry.attributes.position.array;
-            positions[0] = player1.position.x; positions[1] = player1.position.y; positions[2] = player1.position.z;
-            positions[3] = player2.position.x; positions[4] = player2.position.y; positions[5] = player2.position.z;
-            guideLine.geometry.attributes.position.needsUpdate = true;
-
-            // 시점 락온 고정
-            mainCamera.position.copy(player1.position);
-            mainCamera.position.y += 1.3; 
-            mainCamera.lookAt(player2.position);
 
             subCamera.position.set(0, 35, 0);
             subCamera.lookAt(0, 0, 0);
-
-            // 투사체 이동 및 처리
-            for (let i = projectiles.length - 1; i >= 0; i--) {
-                const p = projectiles[i];
-                p.life--;
-
-                if (p.type === 'shockwave') {
-                    p.radius += 0.45;
-                    p.mesh.geometry.dispose(); 
-                    p.mesh.geometry = new THREE.RingGeometry(p.radius - 0.6, p.radius, 32);
-                    p.mesh.geometry.rotateX(-Math.PI / 2);
-                    p.mesh.material.opacity -= 0.035;
-
-                    const dist = player1.position.distanceTo(player2.position);
-                    if (dist <= p.radius && dist >= p.radius - 2.5) {
-                        hitEnemy(p.damage);
-                    }
-                } else {
-                    const currentDir = new THREE.Vector3().subVectors(player2.position, p.mesh.position).normalize();
-                    p.mesh.position.addScaledVector(currentDir, p.speed);
-                    p.mesh.lookAt(player2.position); 
-
-                    const distance = p.mesh.position.distanceTo(player2.position);
-                    if (distance < 2.2) {
-                        hitEnemy(p.damage);
-                        if (p.type === 'grab') isGrabbed = true;
-                        scene.remove(p.mesh);
-                        projectiles.splice(i, 1);
-                        continue;
-                    }
-                }
-
-                if (p.life <= 0) {
-                    scene.remove(p.mesh);
-                    projectiles.splice(i, 1);
-                }
-            }
-
             player2.rotation.y += 0.01;
 
             renderer.render(scene, mainCamera);
@@ -404,6 +495,8 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // 초기 시작 스크린으로 셋업
+        changeScene('start');
         updateUI();
         animate(0);
     </script>
