@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 배틀 아레나 - 구르기 액션 패치</title>
+    <title>3D 락온 배틀 아레나 - 좌우 조작 패치 완료</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: sans-serif; }
         
@@ -54,12 +54,12 @@
     </div>
 
     <div id="ui">
-        <h3>락온 배틀 (구르기 액션 버전)</h3>
+        <h3>락온 배틀 (좌우 조작 정상화 버전)</h3>
         <div class="controls">
-            <b>[방향키]</b> 적 기준 수평 이동 (↑, ↓, ←, →)<br>
+            <b>[방향키]</b> 적 기준 이동 (<span style="color: #00ffcc;"><b>← 왼쪽, → 오른쪽 정상 작동</b></span>)<br>
             <b>[특수 액션]</b><br>
-            - <span style="color: #ffff00;"><b>Spacebar:</b></span> 점프 (방향키 조합 가능)<br>
-            - <span style="color: #00ffff;"><b>Shift 키 (구르기):</b></span> <b>그냥 누르면 정면 구르기 / 방향키와 누르면 그쪽으로 대시 구르기!</b><br>
+            - Spacebar: 점프 (방향 조합 가능)<br>
+            - Shift 키: 대시 구르기 (방향 조합 가능)<br>
             <b>[스킬 단축키 - WASD]</b><br>
             - W (그랩) / A (단검) / S (베기) / D (충격파)<br>
         </div>
@@ -144,12 +144,12 @@
         const jumpForce = 0.35;    
         let isGrounded = true;     
 
-        // ★ 구르기 전용 변수
-        let isRolling = false;      // 구르기 중인가?
-        let rollFrames = 0;         // 구르기 진행 프레임 카운터
-        const rollDuration = 18;    // 구르기 총 지속 시간
-        const rollSpeed = 0.55;     // 구르기 시 이동 속도 (대시 효과)
-        let rollDirection = new THREE.Vector3(); // 구르는 방향 벡터
+        // 구르기 전용 변수
+        let isRolling = false;      
+        let rollFrames = 0;         
+        const rollDuration = 18;    
+        const rollSpeed = 0.55;     
+        let rollDirection = new THREE.Vector3(); 
 
         window.focus();
         window.addEventListener('click', () => { window.focus(); });
@@ -164,13 +164,11 @@
             keys[e.key] = true; 
             keys[e.code] = true; 
 
-            // 점프 메커니즘
             if (e.code === 'Space' && isGrounded && !isRolling) {
                 p1VelocityY = jumpForce;
                 isGrounded = false;
             }
 
-            // ★ Shift 구르기 트리거 계산
             if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !isRolling) {
                 startRoll();
             }
@@ -186,27 +184,26 @@
             keys[e.code] = false;
         });
 
-        // ★ 구르기 방향 산출 함수
+        // 구르기 방향 산출 (좌우 반전 패치 적용)
         function startRoll() {
-            // 현재 프레임의 방향 벡터를 가져옴
             const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position);
             moveForward.y = 0;
             moveForward.normalize();
+            
+            // 패치 포인트: 오른손 법칙 크로스곱 기준 좌우 정렬 정상화
             const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
             let targetDir = new THREE.Vector3(0, 0, 0);
 
-            // 방향키 입력 조합 분석
             if (keys['ArrowUp']) targetDir.add(moveForward);
             if (keys['ArrowDown']) targetDir.addScaledVector(moveForward, -1);
-            if (keys['ArrowLeft']) targetDir.add(moveRight);
-            if (keys['ArrowRight']) targetDir.addScaledVector(moveRight, -1);
+            if (keys['ArrowLeft']) targetDir.addScaledVector(moveRight, -1); // ← 왼쪽 이동 시 역벡터 적용
+            if (keys['ArrowRight']) targetDir.add(moveRight);                 // → 오른쪽 이동 시 정벡터 적용
 
-            // 만약 아무 방향키도 안 누르고 Shift만 눌렀다면 -> 정면(적 방향)으로 구르기 세팅
             if (targetDir.lengthSq() === 0) {
                 targetDir.copy(moveForward);
             } else {
-                targetDir.normalize(); // 대각선 구르기 속도 보정
+                targetDir.normalize(); 
             }
 
             rollDirection.copy(targetDir);
@@ -300,35 +297,29 @@
             moveForward.normalize(); 
             const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-            // ★ 일반 이동 상태 연산 (구르기 중이 아닐 때만 방향키로 직접 제어)
+            // ★ 일반 이동 조작계 (좌우 반전 디버깅 패치 적용)
             if (!isRolling && !isGrabbed) {
-                player1.scale.set(1.0, 1.0, 1.0); // 일반 스케일 유지
+                player1.scale.set(1.0, 1.0, 1.0); 
 
                 if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
                 if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
-                if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, defaultSpeed);
-                if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, -defaultSpeed);
+                if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed); // ← 누르면 왼쪽(-방향)으로 이동
+                if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);  // → 누르면 오른쪽(+방향)으로 이동
             } 
-            // ★ [핵심] 구르기 상태 연산 활성화
             else if (isRolling) {
                 rollFrames++;
-
-                // 구르기 중 고속 수평 대시 이동
                 player1.position.addScaledVector(rollDirection, rollSpeed);
-                
-                // 구르기 비주얼: 캐릭터 구체를 회전시키고 살짝 찌그러뜨림
                 player1.rotation.x += 0.3;
                 player1.rotation.z += 0.2;
-                player1.scale.y = 0.6; // 높이를 낮춰 회피 판정 시각화
+                player1.scale.y = 0.6; 
 
-                // 구르기 시간 종료 체크
                 if (rollFrames >= rollDuration) {
                     isRolling = false;
-                    player1.scale.set(1.0, 1.0, 1.0); // 스케일 복구
+                    player1.scale.set(1.0, 1.0, 1.0); 
                 }
             }
 
-            // 점프 중력 가속 연산
+            // 점프 가속 연산
             if (!isGrounded) {
                 p1VelocityY += gravity; 
                 player1.position.y += p1VelocityY;
