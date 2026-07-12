@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 아레나 - 전체 기능 통합본</title>
+    <title>3D 락온 아레나 - 인간형 모델링 패치</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; user-select: none; color: white; }
         
@@ -34,7 +34,7 @@
         /* 하단 바 배치 */
         .lobby-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: auto; }
         
-        /* 간략화된 하단 중앙 세팅 버튼 */
+        /* 간략화된 하단 세팅 버튼 */
         .btn-enter-select { 
             background: rgba(0, 255, 204, 0.1); border: 2px solid #00ffcc; color: #00ffcc; 
             border-radius: 8px; width: 220px; height: 55px; font-size: 16px; font-weight: bold; 
@@ -42,7 +42,7 @@
         }
         .btn-enter-select:hover { background: #00ffcc; color: #050515; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
 
-        /* [3] 독립형 캐릭터/무기 조합 선택 화면 */
+        /* [3] 캐릭터 & 공통 무기 조합 창 */
         #char-select-screen {
             background: rgba(5, 5, 20, 0.98);
             padding: 50px; box-sizing: border-box; justify-content: center; align-items: center;
@@ -52,7 +52,6 @@
         .selection-zone { display: flex; gap: 40px; }
         .select-box { flex: 1; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; }
         
-        /* 캐릭터 카드 Grid */
         .char-grid { display: grid; grid-template-columns: repeat(3, 150px); gap: 15px; margin-top: 15px; }
         .char-card {
             height: 110px; background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.1);
@@ -66,18 +65,17 @@
         .char-card .type { font-size: 10px; color: #667; text-transform: uppercase; margin-top: 2px; }
         .char-card.active .type { color: #00ffcc; }
 
-        /* 공통 무기 슬롯 리스트 */
         .weapon-list { display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
         .weapon-slot {
             padding: 15px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);
             border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
         }
         .weapon-slot:hover { background: rgba(255,255,255,0.08); }
-        .weapon-slot.active { background: rgba(0,255,204,0.2); border-color: #00ffcc; }
+        .weapon-slot.active { background: rgba(0, 255, 204, 0.2); border-color: #00ffcc; }
         .weapon-slot .w-name { font-weight: bold; }
         .weapon-slot .w-dmg { font-size: 13px; color: #ff3366; }
 
-        /* 배틀 제어장치 */
+        /* 배틀 제어 장치 */
         .battle-control-panel { position: relative; }
         .battle-menu {
             position: absolute; bottom: 85px; right: 0; width: 280px;
@@ -115,7 +113,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">INTEGRATED COMBINATION SYSTEM</div>
+        <div class="game-subtitle">HUMANOID MODELING SYSTEM</div>
         <button class="btn" onclick="changeScene('lobby')">PRESS TO START</button>
     </div>
 
@@ -226,11 +224,62 @@
         let aiDifficulty = 'easy';
         let lastRegenTime = 0;
 
+        // --- 인간형 뼈대 생성 헬퍼 함수 (세부 렌더링 확장 가능 구조) ---
+        function createHumanoidModel(baseColor) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.4, metalness: 0.1 });
+
+            // 1. 몸통 (Torso)
+            const torsoGeo = new THREE.BoxGeometry(0.9, 1.2, 0.5);
+            const torso = new THREE.Mesh(torsoGeo, mat);
+            torso.position.y = 1.1;
+            group.add(torso);
+
+            // 2. 머리 (Head)
+            const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
+            const head = new THREE.Mesh(headGeo, mat);
+            head.position.y = 1.9;
+            group.add(head);
+
+            // 3. 왼팔 / 오른팔 (Arms)
+            const armGeo = new THREE.BoxGeometry(0.25, 0.9, 0.25);
+            
+            const leftArm = new THREE.Mesh(armGeo, mat);
+            leftArm.position.set(-0.65, 1.1, 0);
+            group.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, mat);
+            rightArm.position.set(0.65, 1.1, 0);
+            group.add(rightArm);
+
+            // 4. 왼다리 / 오른다리 (Legs)
+            const legGeo = new THREE.BoxGeometry(0.28, 1.0, 0.28);
+
+            const leftLeg = new THREE.Mesh(legGeo, mat);
+            leftLeg.position.set(-0.25, 0.5, 0);
+            group.add(leftLeg);
+
+            const rightLeg = new THREE.Mesh(legGeo, mat);
+            rightLeg.position.set(0.25, 0.5, 0);
+            group.add(rightLeg);
+
+            // 유틸용 내부 참조 데이터 바인딩
+            group.userData = { torso, head, leftArm, rightArm, leftLeg, rightLeg, materials: [mat] };
+
+            return group;
+        }
+
+        function updateModelColor(model, hexColor) {
+            if(model && model.userData && model.userData.materials) {
+                model.userData.materials.forEach(m => m.color.setHex(hexColor));
+            }
+        }
+
         function processSelectChar(id) {
             selectedChar = id;
             document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active'));
             document.getElementById(`sel-${id}`).classList.add('active');
-            player1.material.color.setHex(CHAR_DB[id].color);
+            updateModelColor(player1, CHAR_DB[id].color);
         }
 
         function renderCommonWeapons() {
@@ -297,14 +346,14 @@
                 document.getElementById('hud-weapon-desc').innerText = `조합 무기: ${wData.name} (+${wData.dmgBonus} DMG)`;
 
                 const label = document.getElementById('hud-p2-label');
-                if(aiDifficulty === 'easy') { label.innerText = "ENEMY (AI 쉬움)"; player2.material.color.setHex(0xffaa00); }
-                else if(aiDifficulty === 'normal') { label.innerText = "ENEMY (AI 보통)"; player2.material.color.setHex(0xff3366); }
-                else if(aiDifficulty === 'hard') { label.innerText = "ENEMY (AI 시련)"; player2.material.color.setHex(0xaa00ff); }
+                if(aiDifficulty === 'easy') { label.innerText = "ENEMY (AI 쉬움)"; updateModelColor(player2, 0xffaa00); }
+                else if(aiDifficulty === 'normal') { label.innerText = "ENEMY (AI 보통)"; updateModelColor(player2, 0xff3366); }
+                else if(aiDifficulty === 'hard') { label.innerText = "ENEMY (AI 시련)"; updateModelColor(player2, 0xaa00ff); }
 
                 document.getElementById('hud-p1-label').innerText = `PLAYER (${selectedChar.toUpperCase()})`;
 
-                player1.position.set(-10, 0.5, 0);
-                player2.position.set(10, 1.0, 0);
+                player1.position.set(-10, 0, 0);
+                player2.position.set(10, 0, 0);
                 p2Stats.hp = 100; p2Stats.mp = 100;
                 isGrabbed = false; isRolling = false;
                 lastRegenTime = performance.now();
@@ -328,12 +377,12 @@
         subRenderer.setSize(250, 180);
         document.getElementById('sub-view').appendChild(subRenderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
         dirLight.position.set(10, 30, 10); scene.add(dirLight);
 
         const grid = new THREE.GridHelper(60, 60, 0x00ffcc, 0x222222);
-        grid.position.y = -0.5; scene.add(grid);
+        grid.position.y = 0; scene.add(grid);
 
         const p1Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
         const p2Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
@@ -347,11 +396,16 @@
             document.getElementById('p2-mp').style.width = `${p2Stats.mp}%`;
         }
 
-        const player1 = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), new THREE.MeshStandardMaterial({ color: 0x00ff88, roughness:0.1 }));
-        player1.position.set(-10, 0.5, 0); scene.add(player1);
+        // 인간형 플레이어/에너미 메쉬 바인딩
+        const player1 = createHumanoidModel(0x00ff88);
+        player1.position.set(-10, 0, 0); scene.add(player1);
 
-        const player2 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 2.0, 2.0), new THREE.MeshStandardMaterial({ color: 0xff3366, roughness: 0.2 }));
-        player2.position.set(10, 1.0, 0); scene.add(player2);
+        const player2 = createHumanoidModel(0xff3366);
+        player2.position.set(10, 0, 0); scene.add(player2);
+
+        // 보정용 중심점 연산 벡터 정의
+        const p1Center = new THREE.Vector3();
+        const p2Center = new THREE.Vector3();
 
         const guideLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([player1.position, player2.position]), new THREE.LineBasicMaterial({ color: 0x334155 }));
         scene.add(guideLine);
@@ -405,35 +459,42 @@
             const wData = COMMON_WEAPON_POOL[selectedWeaponIdx];
             const finalDamage = data.damage + wData.dmgBonus;
 
-            const toEnemy = new THREE.Vector3().subVectors(player2.position, player1.position).normalize();
-            const spawnPos = new THREE.Vector3().copy(player1.position).addScaledVector(toEnemy, 2.0);
-            spawnPos.y = player1.position.y;
+            p1Center.copy(player1.position).y += 1.1;
+            p2Center.copy(player2.position).y += 1.1;
+
+            const toEnemy = new THREE.Vector3().subVectors(p2Center, p1Center).normalize();
+            const spawnPos = new THREE.Vector3().copy(p1Center).addScaledVector(toEnemy, 1.5);
 
             const pMat = new THREE.MeshBasicMaterial({ color: wData.color });
 
             if (type === 'grab') {
-                const grabGeo = new THREE.CylinderGeometry(0.35, 0.35, 7, 16); grabGeo.rotateX(Math.PI / 2);
+                const grabGeo = new THREE.CylinderGeometry(0.25, 0.25, 6, 16); grabGeo.rotateX(Math.PI / 2);
                 const grabMesh = new THREE.Mesh(grabGeo, pMat); grabMesh.position.copy(spawnPos); scene.add(grabMesh);
                 projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.6, life: 60, damage: finalDamage });
             } else if (type === 'dagger') {
-                const daggerGeo = new THREE.ConeGeometry(0.6, 3.0, 16); daggerGeo.rotateX(Math.PI / 2);
+                const daggerGeo = new THREE.ConeGeometry(0.4, 2.2, 16); daggerGeo.rotateX(Math.PI / 2);
                 const daggerMesh = new THREE.Mesh(daggerGeo, pMat); daggerMesh.position.copy(spawnPos); scene.add(daggerMesh);
                 projectiles.push({ type: 'dagger', mesh: daggerMesh, dir: toEnemy, speed: 0.75, life: 60, damage: finalDamage });
             } else if (type === 'slash') {
-                const slashGeo = new THREE.RingGeometry(1.5, 6.0, 32, 1, 0, Math.PI); slashGeo.rotateX(-Math.PI / 3.5);
-                const slashMesh = new THREE.Mesh(slashGeo, new THREE.MeshBasicMaterial({ color: wData.color, side: THREE.DoubleSide })); slashMesh.position.copy(spawnPos); slashMesh.lookAt(player2.position); scene.add(slashMesh);
+                const slashGeo = new THREE.RingGeometry(1.2, 4.5, 32, 1, 0, Math.PI); slashGeo.rotateX(-Math.PI / 3.5);
+                const slashMesh = new THREE.Mesh(slashGeo, new THREE.MeshBasicMaterial({ color: wData.color, side: THREE.DoubleSide })); slashMesh.position.copy(spawnPos); slashMesh.lookAt(p2Center); scene.add(slashMesh);
                 projectiles.push({ type: 'slash', mesh: slashMesh, dir: toEnemy, speed: 0.38, life: 60, damage: finalDamage });
             } else if (type === 'shockwave') {
                 const waveGeo = new THREE.RingGeometry(0.5, 2.0, 32); waveGeo.rotateX(-Math.PI / 2);
-                const waveMesh = new THREE.Mesh(waveGeo, new THREE.MeshBasicMaterial({ color: wData.color, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })); waveMesh.position.copy(player1.position); waveMesh.position.y = player1.position.y - 0.3; scene.add(waveMesh);
+                const waveMesh = new THREE.Mesh(waveGeo, new THREE.MeshBasicMaterial({ color: wData.color, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })); waveMesh.position.copy(player1.position); waveMesh.position.y = 0.05; scene.add(waveMesh);
                 projectiles.push({ type: 'shockwave', mesh: waveMesh, radius: 2.0, life: 35, damage: finalDamage });
             }
         }
 
         function hitEnemy(amount) {
             p2Stats.hp -= amount; if (p2Stats.hp < 0) p2Stats.hp = 0; updateUI();
-            player2.scale.set(1.6, 1.6, 1.6); player2.material.color.setHex(0xffffff);
-            setTimeout(() => { player2.scale.set(1.0, 1.0, 1.0); if(aiDifficulty === 'easy') player2.material.color.setHex(0xffaa00); else if(aiDifficulty === 'normal') player2.material.color.setHex(0xff3366); else player2.material.color.setHex(0xaa00ff); }, 150);
+            player2.scale.set(1.4, 1.4, 1.4);
+            setTimeout(() => { 
+                player2.scale.set(1.0, 1.0, 1.0); 
+                if(aiDifficulty === 'easy') updateModelColor(player2, 0xffaa00); 
+                else if(aiDifficulty === 'normal') updateModelColor(player2, 0xff3366); 
+                else updateModelColor(player2, 0xaa00ff); 
+            }, 150);
             if (p2Stats.hp <= 0) { setTimeout(() => { p2Stats.hp = 100; updateUI(); }, 1500); }
         }
 
@@ -451,12 +512,15 @@
                     lastRegenTime = timestamp;
                 }
 
+                // 락온 타겟 라인 가시성 갱신 (중앙 지점으로 연결 보정)
+                p1Center.copy(player1.position).y += 1.1;
+                p2Center.copy(player2.position).y += 1.1;
+
                 const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position); moveForward.y = 0;
                 const distanceToEnemy = moveForward.length(); moveForward.normalize();
                 const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
                 if (!isRolling && !isGrabbed) {
-                    player1.scale.set(1.0, 1.0, 1.0);
                     if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
                     if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
                     if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed);
@@ -468,21 +532,25 @@
 
                 if (!isGrounded) {
                     p1VelocityY += gravity; player1.position.y += p1VelocityY;
-                    if (player1.position.y <= 0.5) { player1.position.y = 0.5; p1VelocityY = 0; isGrounded = true; }
+                    if (player1.position.y <= 0) { player1.position.y = 0; p1VelocityY = 0; isGrounded = true; }
                 }
 
                 if (isGrabbed) {
-                    const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(moveForward, 1.8); targetPos.y = 1.0;
+                    const targetPos = new THREE.Vector3().copy(player1.position).addScaledVector(moveForward, 1.8); targetPos.y = 0;
                     player2.position.lerp(targetPos, 0.25);
                     if (player2.position.distanceTo(targetPos) < 0.2) isGrabbed = false;
                 }
 
+                // 인간형 모델 시선 동기화
+                player1.lookAt(player2.position.x, player1.position.y, player2.position.z);
+                player2.lookAt(player1.position.x, player2.position.y, player1.position.z);
+
                 const positions = guideLine.geometry.attributes.position.array;
-                positions[0] = player1.position.x; positions[1] = player1.position.y; positions[2] = player1.position.z;
-                positions[3] = player2.position.x; positions[4] = player2.position.y; positions[5] = player2.position.z;
+                positions[0] = p1Center.x; positions[1] = p1Center.y; positions[2] = p1Center.z;
+                positions[3] = p2Center.x; positions[4] = p2Center.y; positions[5] = p2Center.z;
                 guideLine.geometry.attributes.position.needsUpdate = true;
 
-                mainCamera.position.copy(player1.position); mainCamera.position.y += 1.3; mainCamera.lookAt(player2.position);
+                mainCamera.position.copy(player1.position); mainCamera.position.y += 2.0; mainCamera.lookAt(p2Center);
 
                 for (let i = projectiles.length - 1; i >= 0; i--) {
                     const p = projectiles[i]; p.life--;
@@ -491,9 +559,9 @@
                         const dist = player1.position.distanceTo(player2.position);
                         if (dist <= p.radius && dist >= p.radius - 2.5) hitEnemy(p.damage);
                     } else {
-                        const currentDir = new THREE.Vector3().subVectors(player2.position, p.mesh.position).normalize();
+                        const currentDir = new THREE.Vector3().subVectors(p2Center, p.mesh.position).normalize();
                         p.mesh.position.addScaledVector(currentDir, p.speed);
-                        if (p.mesh.position.distanceTo(player2.position) < 2.2) {
+                        if (p.mesh.position.distanceTo(p2Center) < 1.8) {
                             hitEnemy(p.damage); if (p.type === 'grab') isGrabbed = true;
                             scene.remove(p.mesh); projectiles.splice(i, 1); continue;
                         }
@@ -502,7 +570,7 @@
                 }
             } else {
                 const time = timestamp * 0.0002;
-                mainCamera.position.set(Math.sin(time) * 18, 8, Math.cos(time) * 18); mainCamera.lookAt(0, 0, 0);
+                mainCamera.position.set(Math.sin(time) * 18, 12, Math.cos(time) * 18); mainCamera.lookAt(0, 1.0, 0);
             }
 
             renderer.render(scene, mainCamera); subRenderer.render(scene, subCamera);
@@ -513,7 +581,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // 엔진 이니셜라이즈 세팅
         processSelectChar('avenger');
         confirmSelection();
         changeScene('start');
