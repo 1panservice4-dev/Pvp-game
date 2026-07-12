@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 매칭 시스템 복구 버전</title>
+    <title>3D 락온 아레나 - 모드 격리 및 친선 더미 패치</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -47,20 +47,26 @@
         .weapon-slot.active .w-desc { color: #00ffcc; }
 
         .battle-control-panel { position: relative; }
-        .battle-menu { position: absolute; bottom: 65px; right: 0; width: 220px; background: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
-        .menu-btn { width: 100%; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #ddd; text-align: left; cursor: pointer; }
+        .battle-menu { position: absolute; bottom: 65px; right: 0; width: 220px; background: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .menu-btn { width: 100%; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #ddd; text-align: left; cursor: pointer; font-size: 12px; }
+        .ai-selector-label { font-size: 11px; color: #64748b; margin-top: 4px; padding-left: 2px; }
         .ai-difficulty-selector { display: flex; gap: 3px; background: rgba(0,0,0,0.4); padding: 3px; border-radius: 4px; }
         .diff-tab { flex: 1; text-align: center; padding: 4px; font-size: 11px; color: #64748b; cursor: pointer; }
         .diff-tab.active { background: #3b82f6; color: #fff; border-radius: 3px; }
 
-        /* 매칭 모달 스크린 */
-        #match-overlay { justify-content: center; align-items: center; background: rgba(2, 2, 8, 0.85); z-index: 200; }
-        .match-box { background: #0f172a; border: 2px solid #00ffcc; border-radius: 12px; padding: 30px; width: 320px; text-align: center; box-shadow: 0 0 25px rgba(0,255,204,0.3); }
+        /* 매칭 오버레이 박스 */
+        #match-overlay { justify-content: center; align-items: center; background: rgba(2, 2, 8, 0.88); z-index: 200; }
+        .match-box { background: #0f172a; border: 2px solid #00ffcc; border-radius: 12px; padding: 30px; width: 340px; text-align: center; box-shadow: 0 0 25px rgba(0,255,204,0.3); }
         .spinner { width: 40px; height: 40px; border: 4px solid rgba(0,255,204,0.1); border-top-color: #00ffcc; border-radius: 50%; margin: 20px auto; animation: spin 1s infinite linear; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        .dummy-matching-pool { width: 100%; margin: 15px 0; background: rgba(0,0,0,0.4); border-radius: 6px; padding: 5px; font-size: 11px; text-align: left; box-sizing: border-box;}
+        .pool-row { display: flex; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #8892b0; }
+        .pool-row.searching { color: #00ffcc; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
         .btn { padding: 10px 30px; font-weight: bold; color: #050515; background: #00ffcc; border: none; border-radius: 20px; cursor: pointer; }
-        .btn-cancel { background: rgba(255,255,255,0.1); color: #ccc; border: 1px solid rgba(255,255,255,0.2); margin-top: 15px; padding: 8px 20px; font-size: 12px;}
+        .btn-cancel { background: rgba(255,51,102,0.15); color: #ff3366; border: 1px solid rgba(255,51,102,0.3); margin-top: 15px; padding: 8px 20px; font-size: 12px;}
         .btn-battle-trigger { width: 180px; height: 50px; font-size: 18px; background: #ff3366; color: white; border-radius: 8px; }
         .btn-complete { background: #00ffcc; color: #050515; width: 150px; align-self: flex-end; }
 
@@ -82,7 +88,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">MATCHMAKING LAYER RESTORED</div>
+        <div class="game-subtitle">FRIEND VS AI MODE SEPARATION</div>
         <button class="btn" onclick="changeScene('lobby')">START</button>
     </div>
 
@@ -95,13 +101,19 @@
             <button class="btn-enter-select" onclick="changeScene('char-select')">🛠️ 세팅 변경</button>
             <div class="battle-control-panel">
                 <div id="battle-pop-menu" class="battle-menu hidden">
-                    <button class="menu-btn" onclick="startMatchmaking('PVP(일반)')">⚔️ 온라인 라이브 매치</button>
+                    <button class="menu-btn" onclick="startMatchmaking('PVP')">⚔️ 라이브 배틀 매치 (더미)</button>
+                    
+                    <button class="menu-btn" style="color: #00ffcc;" onclick="startMatchmaking('FRIEND')">👥 온라인 친선 배틀 (더미)</button>
+                    
+                    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.08); margin: 4px 0;">
+                    
+                    <div class="ai-selector-label">🤖 AI 연습 배틀 세팅</div>
                     <div class="ai-difficulty-selector">
                         <div class="diff-tab active" id="diff-easy" onclick="selectDifficultyTab('easy')">쉬움</div>
                         <div class="diff-tab" id="diff-normal" onclick="selectDifficultyTab('normal')">보통</div>
                         <div class="diff-tab" id="diff-hard" onclick="selectDifficultyTab('hard')">어려움</div>
                     </div>
-                    <button class="menu-btn" style="color: #ffaa00; font-size: 11px;" onclick="startMatchmaking('AI친선')">🤖 AI 친선 배틀 시작</button>
+                    <button class="menu-btn" style="background: rgba(59,130,246,0.15); text-align: center; color: #3b82f6;" onclick="startMatchmaking('AI_PRACTICE')">▶ 연습 경기 진입</button>
                 </div>
                 <button class="btn btn-battle-trigger" onclick="toggleBattleMenu()">전투 매칭</button>
             </div>
@@ -110,10 +122,14 @@
 
     <div id="match-overlay" class="screen hidden">
         <div class="match-box">
-            <div id="match-mode-title" style="font-size: 18px; font-weight: bold; color: #00ffcc;">매칭 찾는 중...</div>
+            <div id="match-mode-title" style="font-size: 16px; font-weight: bold; color: #00ffcc;">-</div>
             <div class="spinner"></div>
-            <div id="match-timer" style="font-size: 14px; color: #aaa; margin-bottom: 5px;">경과 시간: 0초</div>
-            <div id="match-status-text" style="font-size: 11px; color: #64748b;">적절한 아레나 라이벌을 탐색하고 있습니다.</div>
+            <div id="match-timer" style="font-size: 13px; color: #aaa;">큐 대기 시간: 0초</div>
+            
+            <div class="dummy-matching-pool" id="match-pool-ui">
+                </div>
+
+            <div id="match-status-text" style="font-size: 11px; color: #64748b; line-height: 1.4;">-</div>
             <button class="btn btn-cancel" onclick="cancelMatchmaking()">매칭 취소</button>
         </div>
     </div>
@@ -154,7 +170,7 @@
             </div>
         </div>
         <div id="ui">
-            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브</h4>
+            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브 (AI 연습실)</h4>
             <b>[방향키]</b> 이동 / <b>[Shift]</b> 무빙 구르기 회피<br>
             <b>[스킬]</b> W, A, S, D 사용 가능<br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
@@ -228,38 +244,45 @@
             document.getElementById(`diff-${diff}`).classList.add('active');
         }
 
-        // --- 유저 간 매칭 / 친선 배틀 코어 더미 복구 연출 로직 ---
+        // --- 수정된 모드 처리 설계 (PVP/친선 무한 가두기 & AI 즉시 진입) ---
         function startMatchmaking(modeType) {
             document.getElementById('battle-pop-menu').classList.add('hidden');
-            document.getElementById('match-overlay').classList.remove('hidden');
-            
             matchTimeSeconds = 0;
-            document.getElementById('match-timer').innerText = `경과 시간: 0초`;
-            
-            if(modeType === 'PVP(일반)') {
-                document.getElementById('match-mode-title').innerText = `라이브 아레나 매칭 중`;
-                document.getElementById('match-status-text').innerText = `서버 네트워킹 풀에서 유저 정보를 검색하고 있습니다...`;
-            } else {
-                document.getElementById('match-mode-title').innerText = `친선 배틀 로딩 중`;
-                document.getElementById('match-status-text').innerText = `지정된 난이도의 가상 아레나 AI 봇을 할당 중입니다...`;
-            }
 
-            matchInterval = setInterval(() => {
-                matchTimeSeconds++;
-                document.getElementById('match-timer').innerText = `경과 시간: ${matchTimeSeconds}초`;
-                
-                // 가상 응답 서칭 트래킹 유도 (1~3초 내 임의 매칭 완성 연출)
-                if(matchTimeSeconds >= (Math.floor(Math.random() * 2) + 2)) {
-                    clearInterval(matchInterval);
-                    document.getElementById('match-status-text').style.color = "#00ffcc";
-                    document.getElementById('match-status-text').innerText = "⚡ MATCH FOUND! 아레나 서버 진입 중...";
-                    
-                    setTimeout(() => {
-                        document.getElementById('match-overlay').classList.add('hidden');
-                        changeScene('game');
-                    }, 800);
-                }
-            }, 1000);
+            const poolUi = document.getElementById('match-pool-ui');
+
+            if (modeType === 'PVP') {
+                document.getElementById('match-overlay').classList.remove('hidden');
+                document.getElementById('match-mode-title').innerText = "라이브 배틀 매치 서칭";
+                document.getElementById('match-timer').innerText = `대기 시간: 0초`;
+                document.getElementById('match-status-text').innerHTML = "<span style='color:#ff3366;'>공용 아레나 매칭 서버 인터페이스 연동 전입니다.</span><br>실제 패치 배포 전까지 무한 대기 스케줄러로 작동합니다.";
+                poolUi.innerHTML = `
+                    <div class="pool-row"><span>[아레나 #201] 전역 세션</span><span style="color:#64748b;">Active</span></div>
+                    <div class="pool-row searching"><span>[내 로컬 큐] 탐색 중...</span><span>Matching...</span></div>
+                `;
+                matchInterval = setInterval(() => {
+                    matchTimeSeconds++;
+                    document.getElementById('match-timer').innerText = `대기 시간: ${matchTimeSeconds}초`;
+                }, 1000);
+
+            } else if (modeType === 'FRIEND') {
+                document.getElementById('match-overlay').classList.remove('hidden');
+                document.getElementById('match-mode-title').innerText = "온라인 친선 배틀 연동 룸";
+                document.getElementById('match-timer').innerText = `초대 수락 대기: 0초`;
+                document.getElementById('match-status-text').innerHTML = "<span style='color:#00ffcc;'>소셜 인게임 친구 API 모듈 빌드 단계입니다.</span><br>초대 토큰 발행 및 친구 리스트 연동 전까지 무한 홀딩됩니다.";
+                poolUi.innerHTML = `
+                    <div class="pool-row"><span>[초대 코드] 7XF-92K</span><span style="color:#00ffcc;">발행됨</span></div>
+                    <div class="pool-row searching"><span>[친구 연결 상태]</span><span>Waiting Friends...</span></div>
+                `;
+                matchInterval = setInterval(() => {
+                    matchTimeSeconds++;
+                    document.getElementById('match-timer').innerText = `초대 수락 대기: ${matchTimeSeconds}초`;
+                }, 1000);
+
+            } else if (modeType === 'AI_PRACTICE') {
+                // AI 연습 배틀은 무한 대기 없이 인게임으로 즉각 바인딩
+                changeScene('game');
+            }
         }
 
         function cancelMatchmaking() {
@@ -282,9 +305,9 @@
                 p1Stats.maxHp = cData.hp; p1Stats.hp = cData.hp; p1Stats.maxMp = cData.mp; p1Stats.mp = cData.mp; defaultSpeed = cData.spd;
                 document.getElementById('hud-weapon-desc').innerText = `특성: ${wData.desc}`;
                 const lbl = document.getElementById('hud-p2-label');
-                if(aiDifficulty === 'easy') { lbl.innerText = "ENEMY (쉬움)"; updateModelColor(player2, 0xffaa00); }
-                else if(aiDifficulty === 'normal') { lbl.innerText = "ENEMY (보통)"; updateModelColor(player2, 0xff3366); }
-                else { lbl.innerText = "ENEMY (시련)"; updateModelColor(player2, 0xaa00ff); }
+                if(aiDifficulty === 'easy') { lbl.innerText = "AI BOT (쉬움)"; updateModelColor(player2, 0xffaa00); }
+                else if(aiDifficulty === 'normal') { lbl.innerText = "AI BOT (보통)"; updateModelColor(player2, 0xff3366); }
+                else { lbl.innerText = "AI BOT (시련)"; updateModelColor(player2, 0xaa00ff); }
                 document.getElementById('hud-p1-label').innerText = `PLAYER (${selectedChar.toUpperCase()})`;
                 
                 player1.position.set(-10, 0, 0); 
@@ -299,7 +322,7 @@
             }
         }
 
-        // --- Three.js 선언 지점 ---
+        // --- Three.js 구성 인스턴스 ---
         const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050515);
         const mainCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const subCamera = new THREE.PerspectiveCamera(60, 180 / 130, 0.1, 1000);
