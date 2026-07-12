@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 모드 격리 및 친선 더미 패치</title>
+    <title>3D 락온 아레나 - 구르기 제한 및 콤보 패치</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -54,7 +54,6 @@
         .diff-tab { flex: 1; text-align: center; padding: 4px; font-size: 11px; color: #64748b; cursor: pointer; }
         .diff-tab.active { background: #3b82f6; color: #fff; border-radius: 3px; }
 
-        /* 매칭 오버레이 박스 */
         #match-overlay { justify-content: center; align-items: center; background: rgba(2, 2, 8, 0.88); z-index: 200; }
         .match-box { background: #0f172a; border: 2px solid #00ffcc; border-radius: 12px; padding: 30px; width: 340px; text-align: center; box-shadow: 0 0 25px rgba(0,255,204,0.3); }
         .spinner { width: 40px; height: 40px; border: 4px solid rgba(0,255,204,0.1); border-top-color: #00ffcc; border-radius: 50%; margin: 20px auto; animation: spin 1s infinite linear; }
@@ -88,7 +87,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">FRIEND VS AI MODE SEPARATION</div>
+        <div class="game-subtitle">COMBO MECHANICS & ROLL LIMIT PATCH</div>
         <button class="btn" onclick="changeScene('lobby')">START</button>
     </div>
 
@@ -102,11 +101,8 @@
             <div class="battle-control-panel">
                 <div id="battle-pop-menu" class="battle-menu hidden">
                     <button class="menu-btn" onclick="startMatchmaking('PVP')">⚔️ 라이브 배틀 매치 (더미)</button>
-                    
                     <button class="menu-btn" style="color: #00ffcc;" onclick="startMatchmaking('FRIEND')">👥 온라인 친선 배틀 (더미)</button>
-                    
                     <hr style="border:0; border-top:1px solid rgba(255,255,255,0.08); margin: 4px 0;">
-                    
                     <div class="ai-selector-label">🤖 AI 연습 배틀 세팅</div>
                     <div class="ai-difficulty-selector">
                         <div class="diff-tab active" id="diff-easy" onclick="selectDifficultyTab('easy')">쉬움</div>
@@ -125,10 +121,7 @@
             <div id="match-mode-title" style="font-size: 16px; font-weight: bold; color: #00ffcc;">-</div>
             <div class="spinner"></div>
             <div id="match-timer" style="font-size: 13px; color: #aaa;">큐 대기 시간: 0초</div>
-            
-            <div class="dummy-matching-pool" id="match-pool-ui">
-                </div>
-
+            <div class="dummy-matching-pool" id="match-pool-ui"></div>
             <div id="match-status-text" style="font-size: 11px; color: #64748b; line-height: 1.4;">-</div>
             <button class="btn btn-cancel" onclick="cancelMatchmaking()">매칭 취소</button>
         </div>
@@ -162,6 +155,7 @@
                 <div id="hud-p1-label" style="color:#00ff88;">PLAYER</div>
                 <div class="bar-bg"><div id="p1-hp" class="bar-fill"></div></div>
                 <div class="bar-bg" style="height:5px;"><div id="p1-mp" class="bar-fill mp-fill"></div></div>
+                <div style="font-size: 9px; margin-top: 2px; color: #00ffcc;">구르기 가능 스택: <span id="hud-roll-counter">2</span>/2</div>
             </div>
             <div class="status-box" style="align-items:flex-end;">
                 <div id="hud-p2-label" style="color:#ff3366;">ENEMY</div>
@@ -170,8 +164,9 @@
             </div>
         </div>
         <div id="ui">
-            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브 (AI 연습실)</h4>
-            <b>[방향키]</b> 이동 / <b>[Shift]</b> 무빙 구르기 회피<br>
+            <h4 style="margin:0 0 5px 0; color:#00ffcc;">AI 연습 경기장</h4>
+            <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 (최대 연속 2회)<br>
+            <b>[Space]</b> 점프 (점프 ➡️ 구르기 ➡️ 점프 콤보 연계 가능)<br>
             <b>[스킬]</b> W, A, S, D 사용 가능<br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
         </div>
@@ -244,11 +239,9 @@
             document.getElementById(`diff-${diff}`).classList.add('active');
         }
 
-        // --- 수정된 모드 처리 설계 (PVP/친선 무한 가두기 & AI 즉시 진입) ---
         function startMatchmaking(modeType) {
             document.getElementById('battle-pop-menu').classList.add('hidden');
             matchTimeSeconds = 0;
-
             const poolUi = document.getElementById('match-pool-ui');
 
             if (modeType === 'PVP') {
@@ -280,7 +273,6 @@
                 }, 1000);
 
             } else if (modeType === 'AI_PRACTICE') {
-                // AI 연습 배틀은 무한 대기 없이 인게임으로 즉각 바인딩
                 changeScene('game');
             }
         }
@@ -318,7 +310,13 @@
                 mainCamera.updateMatrixWorld(true);
                 
                 p2Stats.hp = 100; p2Stats.mp = 100;
-                isGrabbed = false; isRolling = false; lastRegenTime = performance.now(); updateUI();
+                isGrabbed = false; isRolling = false; 
+                
+                // 콤보 변수 초기화
+                currentRollsUsed = 0;
+                hasComboJumpAvailable = false;
+                
+                lastRegenTime = performance.now(); updateUI();
             }
         }
 
@@ -354,6 +352,7 @@
             document.getElementById('p1-mp').style.width = `${(p1Stats.mp / p1Stats.maxMp) * 100}%`;
             document.getElementById('p2-hp').style.width = `${p2Stats.hp}%`;
             document.getElementById('p2-mp').style.width = `${p2Stats.mp}%`;
+            document.getElementById('hud-roll-counter').innerText = Math.max(0, 2 - currentRollsUsed);
         }
 
         const player1 = createHumanoidModel(0x00ff88); scene.add(player1);
@@ -365,16 +364,35 @@
         const keys = {}; const projectiles = []; let isGrabbed = false;
         let defaultSpeed = 0.22; let p1VelocityY = 0; const gravity = -0.015; const jumpForce = 0.35; let isGrounded = true;
         
+        // --- 구르기 스택 및 콤보 조건 변수 ---
         let isRolling = false; let rollFrames = 0; const rollDuration = 22; const rollSpeed = 0.52; 
         let rollDirection = new THREE.Vector3(); let rollType = 'forward'; 
+        let currentRollsUsed = 0;        // 현재 누적 구르기 사용 횟수
+        let hasComboJumpAvailable = false; // 구르기 종료 후 점프 연계 가능 여부 플래그
 
         window.addEventListener('keydown', (e) => {
             if (document.getElementById('game-hud').classList.contains('hidden')) return;
             const codeStr = e.code.toLowerCase();
             if(['arrowup','arrowdown','arrowleft','arrowright','space'].includes(codeStr)) e.preventDefault();
             keys[e.key] = true; keys[e.code] = true;
-            if (e.code === 'Space' && isGrounded && !isRolling) { p1VelocityY = jumpForce; isGrounded = false; }
-            if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !isRolling) startRoll();
+            
+            // 점프 입력 판정 (지상이거나 구르기 후 연계 콤보 플래그가 켜졌을 때)
+            if (e.code === 'Space' && !isRolling) { 
+                if (isGrounded) {
+                    p1VelocityY = jumpForce; 
+                    isGrounded = false;
+                } else if (hasComboJumpAvailable) {
+                    // 점프/구르기/점프 콤보 트리거 작동
+                    p1VelocityY = jumpForce * 0.95; // 콤보 점프 높이 보정
+                    hasComboJumpAvailable = false; 
+                }
+            }
+            
+            // 구르기 입력 (1회 진입당 최대 2번 제한 체크)
+            if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !isRolling && currentRollsUsed < 2) {
+                startRoll();
+            }
+            
             if (e.code === 'KeyW') useSkill('grab'); if (e.code === 'KeyA') useSkill('dagger');
             if (e.code === 'KeyS') useSkill('slash'); if (e.code === 'KeyD') useSkill('shockwave');
         });
@@ -395,7 +413,11 @@
             if (targetDir.lengthSq() === 0) { targetDir.copy(moveForward); rollType = 'forward'; } 
             else targetDir.normalize();
 
-            rollDirection.copy(targetDir); isRolling = true; rollFrames = 0;
+            rollDirection.copy(targetDir); 
+            isRolling = true; 
+            rollFrames = 0;
+            currentRollsUsed++; // 구르기 제한 카운트 업
+            updateUI();
         }
 
         function useSkill(type) {
@@ -461,19 +483,37 @@
                 const distanceToEnemy = moveForward.length(); moveForward.normalize();
                 const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
+                // 이동 및 구르기 물리 프로세스
                 if (!isRolling && !isGrabbed) {
                     if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
                     if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
                     if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed);
                     if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);
                 } else if (isRolling) {
-                    rollFrames++; player1.position.addScaledVector(rollDirection, rollSpeed);
-                    if (rollFrames >= rollDuration) isRolling = false;
+                    rollFrames++; 
+                    player1.position.addScaledVector(rollDirection, rollSpeed);
+                    
+                    // 공중 구르기 시 낙하 가속도 상쇄 처리 (공중 콤보 안정성 확보)
+                    if(!isGrounded) p1VelocityY = 0; 
+                    
+                    if (rollFrames >= rollDuration) {
+                        isRolling = false;
+                        hasComboJumpAvailable = true; // 구르기 해제 직후 콤보 점프 가능성 부여
+                    }
                 }
 
+                // 점프/중력 역학 프로세스
                 if (!isGrounded) {
-                    p1VelocityY += gravity; player1.position.y += p1VelocityY;
-                    if (player1.position.y <= 0) { player1.position.y = 0; p1VelocityY = 0; isGrounded = true; }
+                    p1VelocityY += gravity; 
+                    player1.position.y += p1VelocityY;
+                    if (player1.position.y <= 0) { 
+                        player1.position.y = 0; 
+                        p1VelocityY = 0; 
+                        isGrounded = true; 
+                        currentRollsUsed = 0;        // 착지 시 구르기 카운터 리셋
+                        hasComboJumpAvailable = false; // 착지 시 콤보 리셋
+                        updateUI();
+                    }
                 }
 
                 if (isGrabbed) {
