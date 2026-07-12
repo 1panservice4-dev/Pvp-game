@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 무기 리빌드 및 시점 초기화 패치</title>
+    <title>3D 락온 아레나 - 매칭 시스템 복구 버전</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -53,7 +53,14 @@
         .diff-tab { flex: 1; text-align: center; padding: 4px; font-size: 11px; color: #64748b; cursor: pointer; }
         .diff-tab.active { background: #3b82f6; color: #fff; border-radius: 3px; }
 
+        /* 매칭 모달 스크린 */
+        #match-overlay { justify-content: center; align-items: center; background: rgba(2, 2, 8, 0.85); z-index: 200; }
+        .match-box { background: #0f172a; border: 2px solid #00ffcc; border-radius: 12px; padding: 30px; width: 320px; text-align: center; box-shadow: 0 0 25px rgba(0,255,204,0.3); }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(0,255,204,0.1); border-top-color: #00ffcc; border-radius: 50%; margin: 20px auto; animation: spin 1s infinite linear; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
         .btn { padding: 10px 30px; font-weight: bold; color: #050515; background: #00ffcc; border: none; border-radius: 20px; cursor: pointer; }
+        .btn-cancel { background: rgba(255,255,255,0.1); color: #ccc; border: 1px solid rgba(255,255,255,0.2); margin-top: 15px; padding: 8px 20px; font-size: 12px;}
         .btn-battle-trigger { width: 180px; height: 50px; font-size: 18px; background: #ff3366; color: white; border-radius: 8px; }
         .btn-complete { background: #00ffcc; color: #050515; width: 150px; align-self: flex-end; }
 
@@ -75,7 +82,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">FIXED ROTATION & WEAPON ARCHITECTURE</div>
+        <div class="game-subtitle">MATCHMAKING LAYER RESTORED</div>
         <button class="btn" onclick="changeScene('lobby')">START</button>
     </div>
 
@@ -88,15 +95,26 @@
             <button class="btn-enter-select" onclick="changeScene('char-select')">🛠️ 세팅 변경</button>
             <div class="battle-control-panel">
                 <div id="battle-pop-menu" class="battle-menu hidden">
-                    <button class="menu-btn" onclick="alert('⚔️ 매칭 중...')">일반 배틀매치</button>
+                    <button class="menu-btn" onclick="startMatchmaking('PVP(일반)')">⚔️ 온라인 라이브 매치</button>
                     <div class="ai-difficulty-selector">
-                        <div class="diff-tab active" id="diff-easy" onclick="setAiDiff('easy')">쉬움</div>
-                        <div class="diff-tab" id="diff-normal" onclick="setAiDiff('normal')">보통</div>
-                        <div class="diff-tab" id="diff-hard" onclick="setAiDiff('hard')">어려움</div>
+                        <div class="diff-tab active" id="diff-easy" onclick="selectDifficultyTab('easy')">쉬움</div>
+                        <div class="diff-tab" id="diff-normal" onclick="selectDifficultyTab('normal')">보통</div>
+                        <div class="diff-tab" id="diff-hard" onclick="selectDifficultyTab('hard')">어려움</div>
                     </div>
+                    <button class="menu-btn" style="color: #ffaa00; font-size: 11px;" onclick="startMatchmaking('AI친선')">🤖 AI 친선 배틀 시작</button>
                 </div>
                 <button class="btn btn-battle-trigger" onclick="toggleBattleMenu()">전투 매칭</button>
             </div>
+        </div>
+    </div>
+
+    <div id="match-overlay" class="screen hidden">
+        <div class="match-box">
+            <div id="match-mode-title" style="font-size: 18px; font-weight: bold; color: #00ffcc;">매칭 찾는 중...</div>
+            <div class="spinner"></div>
+            <div id="match-timer" style="font-size: 14px; color: #aaa; margin-bottom: 5px;">경과 시간: 0초</div>
+            <div id="match-status-text" style="font-size: 11px; color: #64748b;">적절한 아레나 라이벌을 탐색하고 있습니다.</div>
+            <button class="btn btn-cancel" onclick="cancelMatchmaking()">매칭 취소</button>
         </div>
     </div>
 
@@ -136,7 +154,7 @@
             </div>
         </div>
         <div id="ui">
-            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브 (스마트 트래킹)</h4>
+            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브</h4>
             <b>[방향키]</b> 이동 / <b>[Shift]</b> 무빙 구르기 회피<br>
             <b>[스킬]</b> W, A, S, D 사용 가능<br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
@@ -145,7 +163,6 @@
     </div>
 
     <script>
-        // 무기 프리셋 리빌드 및 가중치 버프 설계
         const COMMON_WEAPON_POOL = [
             { id: "w_bare",   name: "맨손 (Unarmed)",    dmgMult: 1.0, mpMod: 1.0,  desc: "기본 능력치 유지", color: 0xaaaaaa },
             { id: "w_sword",  name: "검 (Sword)",       dmgMult: 1.4, mpMod: 1.0,  desc: "근접 스킬 데미지 증가 (x1.4)", color: 0xff3344 },
@@ -160,6 +177,7 @@
         };
 
         let selectedChar = 'avenger'; let selectedWeaponIdx = 0; let aiDifficulty = 'easy'; let lastRegenTime = 0;
+        let matchInterval = null; let matchTimeSeconds = 0;
 
         function createHumanoidModel(baseColor) {
             const group = new THREE.Group();
@@ -204,11 +222,49 @@
 
         function toggleBattleMenu() { document.getElementById('battle-pop-menu').classList.toggle('hidden'); }
 
-        function setAiDiff(diff) {
+        function selectDifficultyTab(diff) {
             aiDifficulty = diff;
             document.querySelectorAll('.diff-tab').forEach(t => t.classList.remove('active'));
             document.getElementById(`diff-${diff}`).classList.add('active');
-            setTimeout(() => { document.getElementById('battle-pop-menu').classList.add('hidden'); changeScene('game'); }, 100);
+        }
+
+        // --- 유저 간 매칭 / 친선 배틀 코어 더미 복구 연출 로직 ---
+        function startMatchmaking(modeType) {
+            document.getElementById('battle-pop-menu').classList.add('hidden');
+            document.getElementById('match-overlay').classList.remove('hidden');
+            
+            matchTimeSeconds = 0;
+            document.getElementById('match-timer').innerText = `경과 시간: 0초`;
+            
+            if(modeType === 'PVP(일반)') {
+                document.getElementById('match-mode-title').innerText = `라이브 아레나 매칭 중`;
+                document.getElementById('match-status-text').innerText = `서버 네트워킹 풀에서 유저 정보를 검색하고 있습니다...`;
+            } else {
+                document.getElementById('match-mode-title').innerText = `친선 배틀 로딩 중`;
+                document.getElementById('match-status-text').innerText = `지정된 난이도의 가상 아레나 AI 봇을 할당 중입니다...`;
+            }
+
+            matchInterval = setInterval(() => {
+                matchTimeSeconds++;
+                document.getElementById('match-timer').innerText = `경과 시간: ${matchTimeSeconds}초`;
+                
+                // 가상 응답 서칭 트래킹 유도 (1~3초 내 임의 매칭 완성 연출)
+                if(matchTimeSeconds >= (Math.floor(Math.random() * 2) + 2)) {
+                    clearInterval(matchInterval);
+                    document.getElementById('match-status-text').style.color = "#00ffcc";
+                    document.getElementById('match-status-text').innerText = "⚡ MATCH FOUND! 아레나 서버 진입 중...";
+                    
+                    setTimeout(() => {
+                        document.getElementById('match-overlay').classList.add('hidden');
+                        changeScene('game');
+                    }, 800);
+                }
+            }, 1000);
+        }
+
+        function cancelMatchmaking() {
+            clearInterval(matchInterval);
+            document.getElementById('match-overlay').classList.add('hidden');
         }
 
         function changeScene(sceneName) {
@@ -231,11 +287,9 @@
                 else { lbl.innerText = "ENEMY (시련)"; updateModelColor(player2, 0xaa00ff); }
                 document.getElementById('hud-p1-label').innerText = `PLAYER (${selectedChar.toUpperCase()})`;
                 
-                // [해결] 씬 진입 시 플레이어 위치 설정 및 카메라 트랜스폼 오프셋 초기화 강제 집행
                 player1.position.set(-10, 0, 0); 
                 player2.position.set(10, 0, 0); 
                 
-                // 임시 각도 강제 제로화 및 행렬 갱신
                 mainCamera.rotation.set(0, 0, 0);
                 mainCamera.quaternion.set(0, 0, 0, 1);
                 mainCamera.updateMatrixWorld(true);
@@ -245,7 +299,7 @@
             }
         }
 
-        // --- Three.js 핵심 구성 ---
+        // --- Three.js 선언 지점 ---
         const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050515);
         const mainCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const subCamera = new THREE.PerspectiveCamera(60, 180 / 130, 0.1, 1000);
@@ -265,7 +319,6 @@
         const p1Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
         const p2Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
         
-        // 베이스 스킬 스펙
         const SKILL_DATA = { 
             grab: { mpCost: 20, damage: 10 }, 
             dagger: { mpCost: 15, damage: 15 }, 
@@ -327,7 +380,6 @@
             const baseData = SKILL_DATA[type];
             const wData = COMMON_WEAPON_POOL[selectedWeaponIdx]; 
 
-            // 무기 특성 연산 대입 (MP소모 변경 및 데미지 배율 적용)
             const runtimeMpCost = Math.floor(baseData.mpCost * wData.mpMod);
             const runtimeDamage = Math.floor(baseData.damage * wData.dmgMult);
 
@@ -414,7 +466,6 @@
                 positions[3] = p2Center.x; positions[4] = p2Center.y; positions[5] = p2Center.z;
                 guideLine.geometry.attributes.position.needsUpdate = true;
 
-                // 1인칭 카메라 위치 동기화 및 방향 검증 회전 
                 mainCamera.position.copy(p1Center);
                 
                 if (isRolling) {
@@ -432,7 +483,6 @@
                         mainCamera.rotation.z = angle;
                     }
                 } else {
-                    // [핵심] 억지로 누적된 마이너 오프셋 제거 및 정방향 고정 락온
                     mainCamera.lookAt(p2Center);
                 }
 
@@ -453,7 +503,6 @@
                     if (p.life <= 0) { scene.remove(p.mesh); projectiles.splice(i, 1); }
                 }
             } else {
-                // 인게임 외 로비 루프 제어
                 mainCamera.rotation.set(0, 0, 0);
                 const time = timestamp * 0.0002;
                 mainCamera.position.set(Math.sin(time) * 18, 12, Math.cos(time) * 18); mainCamera.lookAt(0, 1.0, 0);
