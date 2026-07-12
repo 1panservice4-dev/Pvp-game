@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 방향별 회전 및 시점 복귀 패치</title>
+    <title>3D 락온 아레나 - 무기 리빌드 및 시점 초기화 패치</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -41,8 +41,10 @@
         }
         .char-card.active { background: rgba(0,255,204,0.15); border-color: #00ffcc; }
         .weapon-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-        .weapon-slot { padding: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; }
+        .weapon-slot { padding: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;}
         .weapon-slot.active { background: rgba(0,255,204,0.2); border-color: #00ffcc; }
+        .w-desc { font-size: 11px; color: #aaa; }
+        .weapon-slot.active .w-desc { color: #00ffcc; }
 
         .battle-control-panel { position: relative; }
         .battle-menu { position: absolute; bottom: 65px; right: 0; width: 220px; background: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
@@ -73,7 +75,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">ADVANCED EVASION CAMERA SYSTEM</div>
+        <div class="game-subtitle">FIXED ROTATION & WEAPON ARCHITECTURE</div>
         <button class="btn" onclick="changeScene('lobby')">START</button>
     </div>
 
@@ -100,7 +102,7 @@
 
     <div id="char-select-screen" class="screen hidden">
         <div class="select-container">
-            <div style="font-size: 22px; font-weight: bold; color: #00ffcc; border-bottom: 1px solid #00ffcc; padding-bottom: 5px;">CROSS WEAPON SETTING</div>
+            <div style="font-size: 22px; font-weight: bold; color: #00ffcc; border-bottom: 1px solid #00ffcc; padding-bottom: 5px;">EQUIPMENT MATRIX</div>
             <div class="selection-zone">
                 <div class="select-box">
                     <div style="font-size: 14px; font-weight: bold;">1. 코어 에이전트</div>
@@ -111,7 +113,7 @@
                     </div>
                 </div>
                 <div class="select-box">
-                    <div style="font-size: 14px; font-weight: bold;">2. 무기 선택</div>
+                    <div style="font-size: 14px; font-weight: bold;">2. 지정 무기 군</div>
                     <div class="weapon-list" id="select-screen-weapon-container"></div>
                 </div>
             </div>
@@ -134,8 +136,8 @@
             </div>
         </div>
         <div id="ui">
-            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브 (1인칭 스마트 캠)</h4>
-            <b>[방향키]</b> 이동 / <b>[Shift]</b> 전후좌우 지능형 구르기 회피<br>
+            <h4 style="margin:0 0 5px 0; color:#00ffcc;">아레나 라이브 (스마트 트래킹)</h4>
+            <b>[방향키]</b> 이동 / <b>[Shift]</b> 무빙 구르기 회피<br>
             <b>[스킬]</b> W, A, S, D 사용 가능<br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
         </div>
@@ -143,10 +145,12 @@
     </div>
 
     <script>
+        // 무기 프리셋 리빌드 및 가중치 버프 설계
         const COMMON_WEAPON_POOL = [
-            { id: "w_plasma", name: "플라즈마 스파이크", dmgBonus: 6, color: 0x00ffcc },
-            { id: "w_laser",  name: "헤비 레이저포",   dmgBonus: 15, color: 0x00ff44 },
-            { id: "w_dagger", name: "초진동 아수라검",   dmgBonus: 9,  color: 0x00d2ff }
+            { id: "w_bare",   name: "맨손 (Unarmed)",    dmgMult: 1.0, mpMod: 1.0,  desc: "기본 능력치 유지", color: 0xaaaaaa },
+            { id: "w_sword",  name: "검 (Sword)",       dmgMult: 1.4, mpMod: 1.0,  desc: "근접 스킬 데미지 증가 (x1.4)", color: 0xff3344 },
+            { id: "w_stick",  name: "스틱 (Stick)",     dmgMult: 1.0, mpMod: 0.75, desc: "MP 소모량 감소 (25% 세이브)", color: 0x33ff66 },
+            { id: "w_wand",   name: "완드 (Wand)",      dmgMult: 0.8, mpMod: 0.45, desc: "MP 소모량 대폭 감소 (55% 세이브)", color: 0x3399ff }
         ];
 
         const CHAR_DB = {
@@ -188,7 +192,7 @@
                 const slot = document.createElement('div');
                 slot.className = `weapon-slot ${idx === selectedWeaponIdx ? 'active' : ''}`;
                 slot.onclick = () => { selectedWeaponIdx = idx; renderCommonWeapons(); };
-                slot.innerHTML = `<span>${w.name}</span><span>+${w.dmgBonus}</span>`;
+                slot.innerHTML = `<span><b>${w.name}</b></span><span class="w-desc">${w.desc}</span>`;
                 container.appendChild(slot);
             });
         }
@@ -220,18 +224,28 @@
                 document.getElementById('game-hud').classList.remove('hidden');
                 const cData = CHAR_DB[selectedChar]; const wData = COMMON_WEAPON_POOL[selectedWeaponIdx];
                 p1Stats.maxHp = cData.hp; p1Stats.hp = cData.hp; p1Stats.maxMp = cData.mp; p1Stats.mp = cData.mp; defaultSpeed = cData.spd;
-                document.getElementById('hud-weapon-desc').innerText = `무기: ${wData.name}`;
+                document.getElementById('hud-weapon-desc').innerText = `특성: ${wData.desc}`;
                 const lbl = document.getElementById('hud-p2-label');
                 if(aiDifficulty === 'easy') { lbl.innerText = "ENEMY (쉬움)"; updateModelColor(player2, 0xffaa00); }
                 else if(aiDifficulty === 'normal') { lbl.innerText = "ENEMY (보통)"; updateModelColor(player2, 0xff3366); }
                 else { lbl.innerText = "ENEMY (시련)"; updateModelColor(player2, 0xaa00ff); }
                 document.getElementById('hud-p1-label').innerText = `PLAYER (${selectedChar.toUpperCase()})`;
-                player1.position.set(-10, 0, 0); player2.position.set(10, 0, 0); p2Stats.hp = 100; p2Stats.mp = 100;
+                
+                // [해결] 씬 진입 시 플레이어 위치 설정 및 카메라 트랜스폼 오프셋 초기화 강제 집행
+                player1.position.set(-10, 0, 0); 
+                player2.position.set(10, 0, 0); 
+                
+                // 임시 각도 강제 제로화 및 행렬 갱신
+                mainCamera.rotation.set(0, 0, 0);
+                mainCamera.quaternion.set(0, 0, 0, 1);
+                mainCamera.updateMatrixWorld(true);
+                
+                p2Stats.hp = 100; p2Stats.mp = 100;
                 isGrabbed = false; isRolling = false; lastRegenTime = performance.now(); updateUI();
             }
         }
 
-        // --- Three.js 핵심 선언 ---
+        // --- Three.js 핵심 구성 ---
         const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050515);
         const mainCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const subCamera = new THREE.PerspectiveCamera(60, 180 / 130, 0.1, 1000);
@@ -250,7 +264,14 @@
 
         const p1Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
         const p2Stats = { hp: 100, maxHp: 100, mp: 100, maxMp: 100 };
-        const SKILL_DATA = { grab: { mpCost: 20, damage: 10 }, dagger: { mpCost: 15, damage: 15 }, slash: { mpCost: 30, damage: 25 }, shockwave: { mpCost: 25, damage: 20 } };
+        
+        // 베이스 스킬 스펙
+        const SKILL_DATA = { 
+            grab: { mpCost: 20, damage: 10 }, 
+            dagger: { mpCost: 15, damage: 15 }, 
+            slash: { mpCost: 30, damage: 25 }, 
+            shockwave: { mpCost: 25, damage: 20 } 
+        };
 
         function updateUI() {
             document.getElementById('p1-hp').style.width = `${(p1Stats.hp / p1Stats.maxHp) * 100}%`;
@@ -268,9 +289,8 @@
         const keys = {}; const projectiles = []; let isGrabbed = false;
         let defaultSpeed = 0.22; let p1VelocityY = 0; const gravity = -0.015; const jumpForce = 0.35; let isGrounded = true;
         
-        // 지능형 구르기 제어 변수
         let isRolling = false; let rollFrames = 0; const rollDuration = 22; const rollSpeed = 0.52; 
-        let rollDirection = new THREE.Vector3(); let rollType = 'forward'; // 'forward', 'backward', 'side'
+        let rollDirection = new THREE.Vector3(); let rollType = 'forward'; 
 
         window.addEventListener('keydown', (e) => {
             if (document.getElementById('game-hud').classList.contains('hidden')) return;
@@ -289,7 +309,7 @@
             const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
             let targetDir = new THREE.Vector3();
 
-            rollType = 'forward'; // 기본값
+            rollType = 'forward';
             if (keys['ArrowUp']) { targetDir.add(moveForward); rollType = 'forward'; }
             else if (keys['ArrowDown']) { targetDir.addScaledVector(moveForward, -1); rollType = 'backward'; }
             
@@ -304,9 +324,16 @@
 
         function useSkill(type) {
             if (isGrabbed && type === 'grab') return;
-            const data = SKILL_DATA[type]; if (p1Stats.mp < data.mpCost) return;
-            p1Stats.mp -= data.mpCost; updateUI();
-            const wData = COMMON_WEAPON_POOL[selectedWeaponIdx]; const finalDamage = data.damage + wData.dmgBonus;
+            const baseData = SKILL_DATA[type];
+            const wData = COMMON_WEAPON_POOL[selectedWeaponIdx]; 
+
+            // 무기 특성 연산 대입 (MP소모 변경 및 데미지 배율 적용)
+            const runtimeMpCost = Math.floor(baseData.mpCost * wData.mpMod);
+            const runtimeDamage = Math.floor(baseData.damage * wData.dmgMult);
+
+            if (p1Stats.mp < runtimeMpCost) return;
+            p1Stats.mp -= runtimeMpCost; updateUI();
+
             p1Center.copy(player1.position).y += 1.1; p2Center.copy(player2.position).y += 1.1;
             const toEnemy = new THREE.Vector3().subVectors(p2Center, p1Center).normalize();
             const spawnPos = new THREE.Vector3().copy(p1Center).addScaledVector(toEnemy, 1.5);
@@ -315,19 +342,19 @@
             if (type === 'grab') {
                 const grabGeo = new THREE.CylinderGeometry(0.25, 0.25, 6, 16); grabGeo.rotateX(Math.PI / 2);
                 const grabMesh = new THREE.Mesh(grabGeo, pMat); grabMesh.position.copy(spawnPos); scene.add(grabMesh);
-                projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.6, life: 60, damage: finalDamage });
+                projectiles.push({ type: 'grab', mesh: grabMesh, dir: toEnemy, speed: 0.6, life: 60, damage: runtimeDamage });
             } else if (type === 'dagger') {
                 const daggerGeo = new THREE.ConeGeometry(0.4, 2.2, 16); daggerGeo.rotateX(Math.PI / 2);
                 const daggerMesh = new THREE.Mesh(daggerGeo, pMat); daggerMesh.position.copy(spawnPos); scene.add(daggerMesh);
-                projectiles.push({ type: 'dagger', mesh: daggerMesh, dir: toEnemy, speed: 0.75, life: 60, damage: finalDamage });
+                projectiles.push({ type: 'dagger', mesh: daggerMesh, dir: toEnemy, speed: 0.75, life: 60, damage: runtimeDamage });
             } else if (type === 'slash') {
                 const slashGeo = new THREE.RingGeometry(1.2, 4.5, 32, 1, 0, Math.PI); slashGeo.rotateX(-Math.PI / 3.5);
                 const slashMesh = new THREE.Mesh(slashGeo, new THREE.MeshBasicMaterial({ color: wData.color, side: THREE.DoubleSide })); slashMesh.position.copy(spawnPos); slashMesh.lookAt(p2Center); scene.add(slashMesh);
-                projectiles.push({ type: 'slash', mesh: slashMesh, dir: toEnemy, speed: 0.38, life: 60, damage: finalDamage });
+                projectiles.push({ type: 'slash', mesh: slashMesh, dir: toEnemy, speed: 0.38, life: 60, damage: runtimeDamage });
             } else if (type === 'shockwave') {
                 const waveGeo = new THREE.RingGeometry(0.5, 2.0, 32); waveGeo.rotateX(-Math.PI / 2);
                 const waveMesh = new THREE.Mesh(waveGeo, new THREE.MeshBasicMaterial({ color: wData.color, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })); waveMesh.position.copy(player1.position); waveMesh.position.y = 0.05; scene.add(waveMesh);
-                projectiles.push({ type: 'shockwave', mesh: waveMesh, radius: 2.0, life: 35, damage: finalDamage });
+                projectiles.push({ type: 'shockwave', mesh: waveMesh, radius: 2.0, life: 35, damage: runtimeDamage });
             }
         }
 
@@ -387,7 +414,7 @@
                 positions[3] = p2Center.x; positions[4] = p2Center.y; positions[5] = p2Center.z;
                 guideLine.geometry.attributes.position.needsUpdate = true;
 
-                // --- 지능형 1인칭 카메라 회전 시스템 고도화 ---
+                // 1인칭 카메라 위치 동기화 및 방향 검증 회전 
                 mainCamera.position.copy(p1Center);
                 
                 if (isRolling) {
@@ -395,20 +422,17 @@
                     const angle = progress * Math.PI * 2;
 
                     if (rollType === 'forward') {
-                        // 앞구르기: Pitch(X축) 방향 순방향 텀블링 시뮬레이션
                         mainCamera.lookAt(p2Center);
                         mainCamera.rotateX(angle);
                     } else if (rollType === 'backward') {
-                        // 뒷구르기: Pitch(X축) 방향 역방향 텀블링 시뮬레이션
                         mainCamera.lookAt(p2Center);
                         mainCamera.rotateX(-angle);
                     } else {
-                        // 좌우구르기: 기존 Roll(Z축) 측면 스핀
                         mainCamera.lookAt(p2Center);
                         mainCamera.rotation.z = angle;
                     }
                 } else {
-                    // 구르기가 종료되면 칼같이 락온 대상을 정면 응시하며 정상 시점으로 자동 복귀
+                    // [핵심] 억지로 누적된 마이너 오프셋 제거 및 정방향 고정 락온
                     mainCamera.lookAt(p2Center);
                 }
 
@@ -429,6 +453,7 @@
                     if (p.life <= 0) { scene.remove(p.mesh); projectiles.splice(i, 1); }
                 }
             } else {
+                // 인게임 외 로비 루프 제어
                 mainCamera.rotation.set(0, 0, 0);
                 const time = timestamp * 0.0002;
                 mainCamera.position.set(Math.sin(time) * 18, 12, Math.cos(time) * 18); mainCamera.lookAt(0, 1.0, 0);
