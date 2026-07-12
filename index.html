@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 락온 아레나 - 인간형 모델링 패치</title>
+    <title>3D 락온 아레나 - 1인칭 회전 회피 패치</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050515; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; user-select: none; color: white; }
         
@@ -42,7 +42,7 @@
         }
         .btn-enter-select:hover { background: #00ffcc; color: #050515; box-shadow: 0 0 15px rgba(0,255,204,0.4); }
 
-        /* [3] 캐릭터 & 공통 무기 조합 창 */
+        /* [3] 캐릭터 & 무기 조합 세팅 화면 */
         #char-select-screen {
             background: rgba(5, 5, 20, 0.98);
             padding: 50px; box-sizing: border-box; justify-content: center; align-items: center;
@@ -75,7 +75,7 @@
         .weapon-slot .w-name { font-weight: bold; }
         .weapon-slot .w-dmg { font-size: 13px; color: #ff3366; }
 
-        /* 배틀 제어 장치 */
+        /* 배틀 팝업 및 매칭 */
         .battle-control-panel { position: relative; }
         .battle-menu {
             position: absolute; bottom: 85px; right: 0; width: 280px;
@@ -113,7 +113,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">HUMANOID MODELING SYSTEM</div>
+        <div class="game-subtitle">1ST-PERSON SPIN EVASION SYSTEM</div>
         <button class="btn" onclick="changeScene('lobby')">PRESS TO START</button>
     </div>
 
@@ -195,9 +195,9 @@
         </div>
 
         <div id="ui">
-            <h3>아레나 라이브 존</h3>
+            <h3>아레나 라이브 존 (1인칭 시점 모드)</h3>
             <div class="controls">
-                <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 회피<br>
+                <b>[방향키]</b> 이동 / <b>[Shift]</b> 1인칭 화면 회전 회피!<br>
                 <b>[스킬]</b> W (그랩) / A (단검) / S (베기) / D (충격파)<br>
                 <span style="color:#00ffcc;" id="hud-weapon-desc">-</span>
             </div>
@@ -224,48 +224,29 @@
         let aiDifficulty = 'easy';
         let lastRegenTime = 0;
 
-        // --- 인간형 뼈대 생성 헬퍼 함수 (세부 렌더링 확장 가능 구조) ---
         function createHumanoidModel(baseColor) {
             const group = new THREE.Group();
             const mat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.4, metalness: 0.1 });
 
-            // 1. 몸통 (Torso)
             const torsoGeo = new THREE.BoxGeometry(0.9, 1.2, 0.5);
             const torso = new THREE.Mesh(torsoGeo, mat);
             torso.position.y = 1.1;
             group.add(torso);
 
-            // 2. 머리 (Head)
             const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
             const head = new THREE.Mesh(headGeo, mat);
             head.position.y = 1.9;
             group.add(head);
 
-            // 3. 왼팔 / 오른팔 (Arms)
             const armGeo = new THREE.BoxGeometry(0.25, 0.9, 0.25);
-            
-            const leftArm = new THREE.Mesh(armGeo, mat);
-            leftArm.position.set(-0.65, 1.1, 0);
-            group.add(leftArm);
+            const leftArm = new THREE.Mesh(armGeo, mat); leftArm.position.set(-0.65, 1.1, 0); group.add(leftArm);
+            const rightArm = new THREE.Mesh(armGeo, mat); rightArm.position.set(0.65, 1.1, 0); group.add(rightArm);
 
-            const rightArm = new THREE.Mesh(armGeo, mat);
-            rightArm.position.set(0.65, 1.1, 0);
-            group.add(rightArm);
-
-            // 4. 왼다리 / 오른다리 (Legs)
             const legGeo = new THREE.BoxGeometry(0.28, 1.0, 0.28);
+            const leftLeg = new THREE.Mesh(legGeo, mat); leftLeg.position.set(-0.25, 0.5, 0); group.add(leftLeg);
+            const rightLeg = new THREE.Mesh(legGeo, mat); rightLeg.position.set(0.25, 0.5, 0); group.add(rightLeg);
 
-            const leftLeg = new THREE.Mesh(legGeo, mat);
-            leftLeg.position.set(-0.25, 0.5, 0);
-            group.add(leftLeg);
-
-            const rightLeg = new THREE.Mesh(legGeo, mat);
-            rightLeg.position.set(0.25, 0.5, 0);
-            group.add(rightLeg);
-
-            // 유틸용 내부 참조 데이터 바인딩
             group.userData = { torso, head, leftArm, rightArm, leftLeg, rightLeg, materials: [mat] };
-
             return group;
         }
 
@@ -285,18 +266,11 @@
         function renderCommonWeapons() {
             const container = document.getElementById('select-screen-weapon-container');
             container.innerHTML = "";
-
             COMMON_WEAPON_POOL.forEach((w, idx) => {
                 const slot = document.createElement('div');
                 slot.className = `weapon-slot ${idx === selectedWeaponIdx ? 'active' : ''}`;
-                slot.onclick = () => {
-                    selectedWeaponIdx = idx;
-                    renderCommonWeapons();
-                };
-                slot.innerHTML = `
-                    <span class="w-name">${w.name}</span>
-                    <span class="w-dmg">대미지 가중치: +${w.dmgBonus}</span>
-                `;
+                slot.onclick = () => { selectedWeaponIdx = idx; renderCommonWeapons(); };
+                slot.innerHTML = `<span class="w-name">${w.name}</span><span class="w-dmg">대미지 가중치: +${w.dmgBonus}</span>`;
                 container.appendChild(slot);
             });
         }
@@ -361,11 +335,13 @@
             }
         }
 
-        // --- Three.js 그래픽 코어 ---
+        // --- Three.js 엔진 구동 코어 ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050515);
 
         const mainCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // 상단 미니맵 뷰 카메라 
         const subCamera = new THREE.PerspectiveCamera(60, 250 / 180, 0.1, 1000);
         subCamera.position.set(0, 35, 0); subCamera.lookAt(0, 0, 0);
 
@@ -396,14 +372,9 @@
             document.getElementById('p2-mp').style.width = `${p2Stats.mp}%`;
         }
 
-        // 인간형 플레이어/에너미 메쉬 바인딩
-        const player1 = createHumanoidModel(0x00ff88);
-        player1.position.set(-10, 0, 0); scene.add(player1);
+        const player1 = createHumanoidModel(0x00ff88); player1.position.set(-10, 0, 0); scene.add(player1);
+        const player2 = createHumanoidModel(0xff3366); player2.position.set(10, 0, 0); scene.add(player2);
 
-        const player2 = createHumanoidModel(0xff3366);
-        player2.position.set(10, 0, 0); scene.add(player2);
-
-        // 보정용 중심점 연산 벡터 정의
         const p1Center = new THREE.Vector3();
         const p2Center = new THREE.Vector3();
 
@@ -412,7 +383,9 @@
 
         const keys = {}; const projectiles = []; let isGrabbed = false;
         let defaultSpeed = 0.22; let p1VelocityY = 0; const gravity = -0.015; const jumpForce = 0.35; let isGrounded = true;
-        let isRolling = false; let rollFrames = 0; const rollDuration = 18; const rollSpeed = 0.55; let rollDirection = new THREE.Vector3();
+        
+        // 회피 연산 변수군
+        let isRolling = false; let rollFrames = 0; const rollDuration = 24; const rollSpeed = 0.48; let rollDirection = new THREE.Vector3();
 
         window.addEventListener('keydown', (e) => {
             const isGameActive = !document.getElementById('game-hud').classList.contains('hidden');
@@ -512,8 +485,7 @@
                     lastRegenTime = timestamp;
                 }
 
-                // 락온 타겟 라인 가시성 갱신 (중앙 지점으로 연결 보정)
-                p1Center.copy(player1.position).y += 1.1;
+                p1Center.copy(player1.position).y += 1.9; // 1인칭 카메라 마운트 포인트를 눈높이(Head) 중심선으로 배치
                 p2Center.copy(player2.position).y += 1.1;
 
                 const moveForward = new THREE.Vector3().subVectors(player2.position, player1.position); moveForward.y = 0;
@@ -541,7 +513,6 @@
                     if (player2.position.distanceTo(targetPos) < 0.2) isGrabbed = false;
                 }
 
-                // 인간형 모델 시선 동기화
                 player1.lookAt(player2.position.x, player1.position.y, player2.position.z);
                 player2.lookAt(player1.position.x, player2.position.y, player1.position.z);
 
@@ -550,7 +521,17 @@
                 positions[3] = p2Center.x; positions[4] = p2Center.y; positions[5] = p2Center.z;
                 guideLine.geometry.attributes.position.needsUpdate = true;
 
-                mainCamera.position.copy(player1.position); mainCamera.position.y += 2.0; mainCamera.lookAt(p2Center);
+                // --- 1인칭 카메라 앵글 트래킹 모듈 ---
+                mainCamera.position.copy(p1Center); // 플레이어 눈 높이에 카메라 완전 결착
+                mainCamera.lookAt(p2Center);       // 적군을 항상 정면 락온 응시
+
+                // 구르기 중일 때 카메라 Z축 회전(Roll)을 가미하여 1인칭 롤링감 구현
+                if (isRolling) {
+                    const rollProgress = rollFrames / rollDuration;
+                    mainCamera.rotation.z = rollProgress * Math.PI * 2; // 한 바퀴(360도) 전방향 스핀 연산
+                } else {
+                    mainCamera.rotation.z = 0; // 평시 각도 리셋
+                }
 
                 for (let i = projectiles.length - 1; i >= 0; i--) {
                     const p = projectiles[i]; p.life--;
@@ -569,6 +550,7 @@
                     if (p.life <= 0) { scene.remove(p.mesh); projectiles.splice(i, 1); }
                 }
             } else {
+                mainCamera.rotation.z = 0;
                 const time = timestamp * 0.0002;
                 mainCamera.position.set(Math.sin(time) * 18, 12, Math.cos(time) * 18); mainCamera.lookAt(0, 1.0, 0);
             }
