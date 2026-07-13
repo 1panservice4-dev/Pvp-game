@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 연속 구르기 제약 및 콤보 패치</title>
+    <title>3D 락온 아레나 - 2회 구르기 후 강제 착지 패치</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -46,7 +46,7 @@
         .w-desc { font-size: 11px; color: #aaa; }
         .weapon-slot.active .w-desc { color: #00ffcc; }
 
-        .battle-control-panel { relative; }
+        .battle-control-panel { position: relative; }
         .battle-menu { position: absolute; bottom: 65px; right: 0; width: 220px; background: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
         .menu-btn { width: 100%; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #ddd; text-align: left; cursor: pointer; font-size: 12px; }
         .ai-selector-label { font-size: 11px; color: #64748b; margin-top: 4px; padding-left: 2px; }
@@ -166,7 +166,7 @@
         <div id="ui">
             <h4 style="margin:0 0 5px 0; color:#00ffcc;">AI 연습 경기장</h4>
             <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 (한 번에 연속 2회만 가능)<br>
-            <b>[Space]</b> 점프 (구르기 직후 바로 공중 점프 콤보 연계 가능)<br>
+            <b>[Space]</b> 점프 (2회 연속 구른 직후에는 강제 착지 유도)<br>
             <b>[스킬]</b> W, A, S, D 사용 가능<br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
         </div>
@@ -312,7 +312,6 @@
                 p2Stats.hp = 100; p2Stats.mp = 100;
                 isGrabbed = false; isRolling = false; 
                 
-                // 연속 입력 핸들링 변수들 초기화
                 comboRollCount = 0;
                 hasComboJumpAvailable = false;
                 
@@ -364,12 +363,11 @@
         const keys = {}; const projectiles = []; let isGrabbed = false;
         let defaultSpeed = 0.22; let p1VelocityY = 0; const gravity = -0.015; const jumpForce = 0.35; let isGrounded = true;
         
-        // --- 수정된 연속 구르기 제약 제어 설계 ---
         let isRolling = false; let rollFrames = 0; const rollDuration = 22; const rollSpeed = 0.52; 
         let rollDirection = new THREE.Vector3(); let rollType = 'forward'; 
         
-        let comboRollCount = 0;          // 연속 구르기 사용 횟수 (최대 2회)
-        let hasComboJumpAvailable = false; // 구르기 연계 공중 점프 가능 여부
+        let comboRollCount = 0;          
+        let hasComboJumpAvailable = false; 
 
         window.addEventListener('keydown', (e) => {
             if (document.getElementById('game-hud').classList.contains('hidden')) return;
@@ -382,16 +380,16 @@
                 if (isGrounded && !isRolling) {
                     p1VelocityY = jumpForce; 
                     isGrounded = false;
-                } else if (hasComboJumpAvailable && !isRolling) {
-                    // 구르기 직후 보정된 콤보 점프 트리거 작동
+                } else if (hasComboJumpAvailable && !isRolling && comboRollCount < 2) {
+                    // 2회 연속 구른 직후 상태가 아닐 때만 공중 콤보 점프 허용
                     p1VelocityY = jumpForce * 0.95; 
                     hasComboJumpAvailable = false; 
                 }
             }
             
-            // 2. 연속 구르기 판정 (구르기 진행 중이거나 끝난 직후 연속 2회까지만 허용)
+            // 2. 연속 구르기 제한 판정
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-                if (comboRollCount < 2) {
+                if (comboRollCount < 2 && !isRolling) {
                     startRoll();
                 }
             }
@@ -419,7 +417,7 @@
             rollDirection.copy(targetDir); 
             isRolling = true; 
             rollFrames = 0;
-            comboRollCount++; // 연속 구르기 카운트 추가
+            comboRollCount++; 
             updateUI();
         }
 
@@ -493,7 +491,6 @@
                     if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed);
                     if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);
                     
-                    // 움직이거나 대기하는 일반 상태일 때, 연속 조작이 완전히 멈췄다면 카운트 자연 리셋
                     if (comboRollCount > 0 && !keys['ShiftLeft'] && !keys['ShiftRight'] && isGrounded) {
                         comboRollCount = 0;
                         updateUI();
@@ -502,12 +499,17 @@
                     rollFrames++; 
                     player1.position.addScaledVector(rollDirection, rollSpeed);
                     
-                    // 공중 구르기 중엔 자유 낙하를 일시 멈춰 콤보 쾌감 유지
                     if(!isGrounded) p1VelocityY = 0; 
                     
                     if (rollFrames >= rollDuration) {
                         isRolling = false;
-                        hasComboJumpAvailable = true; // 구르기 풀리는 순간 점프 연계 활성화
+                        
+                        // 💥 2회 연속 구른 상태라면 콤보 점프 강제 차단 및 무조건 착지 유도
+                        if (comboRollCount >= 2) {
+                            hasComboJumpAvailable = false; 
+                        } else {
+                            hasComboJumpAvailable = true; 
+                        }
                     }
                 }
 
@@ -519,7 +521,7 @@
                         player1.position.y = 0; 
                         p1VelocityY = 0; 
                         isGrounded = true; 
-                        comboRollCount = 0;        // 지상 도달 시 리셋
+                        comboRollCount = 0;        // 땅에 닿으면 연속 제한 리셋
                         hasComboJumpAvailable = false;
                         updateUI();
                     }
