@@ -2,140 +2,519 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>3D 대전 게임</title>
-    <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 50px;
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            pointer-events: none;
-        }
-        .hp-bar { width: 200px; height: 20px; background: red; border: 2px solid white; }
-        .hp-fill { width: 100%; height: 100%; background: lime; transition: width 0.1s; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 대전 액션 게임</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background-color: #111;
+            color: white;
+            user-select: none;
+        }
+
+        /* 공통 화면 스타일 */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            transition: opacity 0.5s ease;
+        }
+        .hidden {
+            display: none !important;
+            opacity: 0;
+        }
+
+        /* 1. 게임 시작 화면 */
+        #start-screen {
+            background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url('https://picsum.photos/1920/1080?blur=5') no-repeat center center/cover;
+        }
+        .title {
+            font-size: 4rem;
+            margin-bottom: 50px;
+            text-shadow: 0 0 20px #ff0055;
+            letter-spacing: 5px;
+        }
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            background-color: #ff0055;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 0, 85, 0.4);
+            transition: 0.2s;
+        }
+        .btn:hover {
+            background-color: #ff3377;
+            transform: scale(1.05);
+        }
+
+        /* 2. 로비 화면 */
+        #lobby-screen {
+            background: #1a1a2e;
+            display: grid;
+            grid-template-rows: 80px 1fr 180px;
+            grid-template-columns: 1fr 300px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #lobby-header {
+            grid-column: 1 / 3;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+        }
+        #lobby-main {
+            grid-column: 1 / 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            color: #e94560;
+        }
+        #lobby-right {
+            grid-column: 2 / 3;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-end;
+            padding-right: 20px;
+        }
+        #character-select-bar {
+            grid-column: 1 / 3;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            justify-content: center;
+        }
+        .select-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        .select-item {
+            padding: 10px 20px;
+            background: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .select-item.active {
+            border-color: #e94560;
+            background: #0f3460;
+        }
+
+        /* 모달 팝업 (배틀 선택지) */
+        .modal {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        .modal-content {
+            background: #16213e;
+            padding: 40px;
+            border-radius: 10px;
+            border: 2px solid #e94560;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 300px;
+        }
+
+        /* 3. 인게임 UI */
+        #game-canvas {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1;
+        }
+        #in-game-ui {
+            position: absolute;
+            top: 20px; left: 20px;
+            z-index: 5;
+            pointer-events: none;
+            width: 300px;
+        }
+        .bar-container {
+            width: 100%; background: #444; height: 20px; border-radius: 10px; margin-bottom: 8px; overflow: hidden;
+            border: 1px solid #fff;
+        }
+        .bar { height: 100%; width: 100%; transition: width 0.2s; }
+        #hp-bar { background: #ff3333; }
+        #mp-bar { background: #3333ff; }
+        #log-box {
+            position: absolute; bottom: 20px; left: 20px; z-index: 5;
+            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+            max-height: 150px; overflow-y: auto; width: 400px; pointer-events: none;
+        }
+    </style>
 </head>
 <body>
 
-    <div id="ui">
-        <div>Player HP: <div class="hp-bar"><div id="player-hp" class="hp-fill"></div></div></div>
-        <div>Enemy HP: <div class="hp-bar"><div id="enemy-hp" class="hp-fill"></div></div></div>
+    <div id="start-screen" class="screen">
+        <div class="title">3D BATTLE ARENA</div>
+        <button class="btn" onclick="goToLobby()">게임 시작</button>
     </div>
 
+    <div id="lobby-screen" class="screen hidden">
+        <div id="lobby-header">
+            <h2>대기실</h2>
+            <div id="selected-info">선택: 워리어 / 장검</div>
+        </div>
+        
+        <div id="lobby-main">
+            <div style="text-align:center;">
+                <p>전장에 참여할 준비를 하십시오.</p>
+                <small style="color:#aaa;">(원하는 캐릭터와 무기를 아래에서 선택하세요)</small>
+            </div>
+        </div>
+        
+        <div id="lobby-right">
+            <button class="btn" style="background-color: #e94560; padding: 20px 50px; font-size: 1.8rem;" onclick="openBattleMenu()">BATTLE</button>
+        </div>
+        
+        <div id="character-select-bar">
+            <div class="select-container">
+                <div class="select-item active" onclick="selectChar(this, '워리어')">워리어</div>
+                <div class="select-item" onclick="selectChar(this, '마법사')">마법사</div>
+                <div class="select-item" onclick="selectChar(this, '로그')">로그</div>
+                <div class="select-item" onclick="selectChar(this, '팔라딘')">팔라딘</div>
+            </div>
+            <div class="select-container">
+                <div class="select-item active" onclick="selectWeapon(this, '장검')">장검</div>
+                <div class="select-item" onclick="selectWeapon(this, '지팡이')">지팡이</div>
+                <div class="select-item" onclick="selectWeapon(this, '단검')">단검</div>
+                <div class="select-item" onclick="selectWeapon(this, '대검')">대검</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="battle-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="text-align:center; margin-top:0;">대전 모드 선택</h3>
+            <button class="btn" onclick="startBattle('AI 연습전')">AI와 연습</button>
+            <button class="btn" onclick="startDummyMatching('유저 매칭')">유저 간 매칭</button>
+            <button class="btn" onclick="startDummyMatching('친선 매칭')">친구와 친선전투</button>
+            <button class="btn" style="background:#444;" onclick="closeBattleMenu()">취소</button>
+        </div>
+    </div>
+
+    <canvas id="game-canvas" class="hidden"></canvas>
+    
+    <div id="in-game-ui" class="hidden">
+        <div>HP</div>
+        <div class="bar-container"><div id="hp-bar" class="bar"></div></div>
+        <div>MP</div>
+        <div class="bar-container"><div id="mp-bar" class="bar"></div></div>
+        <p style="font-size: 12px; color: #ccc;">이동: 방향키 | 스킬: W,A,S,D<br>회피: Shift+방향키 | 점프: Space+방향키</p>
+    </div>
+
+    <div id="log-box" class="hidden"></div>
+
     <script>
-        // --- 게임 기본 설정 ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x202030);
+        // --- 더미 데이터 설정 ---
+        const dummyUsers = ["Player_X", "ShadowBlade", "Nexus7", "GamerKR", "AlphaMonster"];
+        const dummyFriends = ["짱구", "철수", "유리", "맹구"];
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 10, 15);
-        camera.lookAt(0, 0, 0);
+        // --- 플레이어 상태 변수 ---
+        let selectedCharacter = "워리어";
+        let selectedWeapon = "장검";
+        let hp = 100;
+        let mp = 100;
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        // --- 조명 ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(10, 20, 10);
-        scene.add(directionalLight);
-
-        // --- 바닥 ---
-        const floorGeo = new THREE.PlaneGeometry(30, 30);
-        const floorMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.8 });
-        const floor = new THREE.Mesh(floorGeo, floorMat);
-        floor.rotation.x = -Math.PI / 2;
-        scene.add(floor);
-
-        // --- 캐릭터 생성 ---
-        // 플레이어 (파란색)
-        const playerGeo = new THREE.BoxGeometry(2, 2, 2);
-        const playerMat = new THREE.MeshStandardMaterial({ color: 0x00a8ff });
-        const player = new THREE.Mesh(playerGeo, playerMat);
-        player.position.set(-5, 1, 0);
-        scene.add(player);
-
-        // 적 (빨간색)
-        const enemyGeo = new THREE.BoxGeometry(2, 2, 2);
-        const enemyMat = new THREE.MeshStandardMaterial({ color: 0xff4757 });
-        const enemy = new THREE.Mesh(enemyGeo, enemyMat);
-        enemy.position.set(5, 1, 0);
-        scene.add(enemy);
-
-        // --- 상태 변수 ---
-        let playerHp = 100;
-        let enemyHp = 100;
-        const speed = 0.15;
-        const keys = {};
-
-        // 키보드 입력 감지
-        window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
-        window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
-
-        // 충돌 체크 함수 (간단한 거리 계산)
-        function checkCollision(obj1, obj2) {
-            const dist = obj1.position.distanceTo(obj2.position);
-            return dist < 2.0; // 두 박스의 크기를 고려한 거리
+        // --- 화면 전환 함수 ---
+        function goToLobby() {
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
         }
 
-        // --- 메인 게임 루프 ---
-        function animate() {
-            requestAnimationFrame(animate);
+        function selectChar(element, name) {
+            resetActiveClass(element);
+            selectedCharacter = name;
+            updateInfoText();
+        }
 
-            if (playerHp <= 0 || enemyHp <= 0) return;
+        function selectWeapon(element, name) {
+            resetActiveClass(element);
+            selectedWeapon = name;
+            updateInfoText();
+        }
 
-            // 플레이어 조작 (WASD)
-            if (keys['w']) player.position.z -= speed;
-            if (keys['s']) player.position.z += speed;
-            if (keys['a']) player.position.x -= speed;
-            if (keys['d']) player.position.x += speed;
+        function resetActiveClass(el) {
+            const siblings = el.parentElement.children;
+            for(let sibling of siblings) sibling.classList.remove('active');
+            el.classList.add('active');
+        }
 
-            // 간단한 적 AI (플레이어를 향해 다가옴)
-            const dir = new THREE.Vector3().subVectors(player.position, enemy.position).normalize();
-            enemy.position.x += dir.x * (speed * 0.4);
-            enemy.position.z += dir.z * (speed * 0.4);
+        function updateInfoText() {
+            document.getElementById('selected-info').innerText = `선택: ${selectedCharacter} / ${selectedWeapon}`;
+        }
 
-            // 공격 및 충돌 로직 (스페이스바를 누른 채 충돌하면 적 데미지, 그냥 부딪히면 플레이어 데미지)
-            if (checkCollision(player, enemy)) {
-                if (keys[' ']) { // Spacebar 공격
-                    enemyHp -= 1;
-                    document.getElementById('enemy-hp').style.width = enemyHp + '%';
-                    // 적을 뒤로 밀쳐냄 (넉백)
-                    enemy.position.addScaledVector(dir, -1.5);
+        function openBattleMenu() { document.getElementById('battle-modal').classList.remove('hidden'); }
+        function closeBattleMenu() { document.getElementById('battle-modal').classList.add('hidden'); }
+
+        // 더미데이터 매칭 시뮬레이션
+        function startDummyMatching(mode) {
+            const modalContent = document.querySelector('.modal-content');
+            const originalHTML = modalContent.innerHTML;
+            
+            let list = mode === '유저 매칭' ? dummyUsers : dummyFriends;
+            let randomTarget = list[Math.floor(Math.random() * list.length)];
+            
+            modalContent.innerHTML = `<h3 style='text-align:center;'>${mode} 중...</h3><div style='text-align:center; margin:20px 0;'>상대를 찾는 중입니다...</div>`;
+            
+            setTimeout(() => {
+                modalContent.innerHTML = `<h3 style='text-align:center; color:#e94560;'>매칭 완료!</h3><div style='text-align:center; margin:20px 0;'>상대: <b>${randomTarget}</b></div>`;
+                setTimeout(() => {
+                    modalContent.innerHTML = originalHTML;
+                    closeBattleMenu();
+                    startBattle(mode + ` (${randomTarget})`);
+                }, 1500);
+            }, 1500);
+        }
+
+        // --- 3D 게임 구동 Engine (Three.js) ---
+        let scene, camera, renderer, player, weaponCube;
+        let isEvading = false;
+        let isJumping = false;
+        let jumpVelocity = 0;
+        const keys = {};
+
+        function startBattle(modeInfo) {
+            // UI 전환
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('game-canvas').classList.remove('hidden');
+            document.getElementById('in-game-ui').classList.remove('hidden');
+            const logBox = document.getElementById('log-box');
+            logBox.classList.remove('hidden');
+            logBox.innerHTML = `<div>[시스템] ${modeInfo}에 진입했습니다!</div>`;
+
+            // 게임 초기화
+            hp = 100; mp = 100;
+            updateUIBars();
+            init3D();
+        }
+
+        function updateUIBars() {
+            document.getElementById('hp-bar').style.width = hp + "%";
+            document.getElementById('mp-bar').style.width = mp + "%";
+        }
+
+        function addLog(text) {
+            const logBox = document.getElementById('log-box');
+            logBox.innerHTML += `<div>${text}</div>`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        function init3D() {
+            // 1. 씬 & 카메라 세팅
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111122);
+            scene.fog = new THREE.FogExp2(0x111122, 0.05);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // 2. 바닥 조명 생성
+            const grid = new THREE.GridHelper(50, 50, 0xff0055, 0x444444);
+            scene.add(grid);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 7).normalize();
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040));
+
+            // 3. 플레이어 생성 (박스로 대체)
+            const geometry = new THREE.BoxGeometry(1, 2, 1);
+            const material = new THREE.MeshLambertMaterial({ color: 0x00ffcc });
+            player = new THREE.Mesh(geometry, material);
+            player.position.y = 1;
+            scene.add(player);
+
+            // 4. 무기 생성 (무기 종류 4종에 따른 색상/형태 변형)
+            let weaponColor = 0xffffff;
+            let wSize = {x: 0.2, y: 1.5, z: 0.2};
+            if(selectedWeapon === "장검") { weaponColor = 0xcccccc; }
+            else if(selectedWeapon === "지팡이") { weaponColor = 0xaa55ff; wSize = {x:0.15, y:1.8, z:0.15}; }
+            else if(selectedWeapon === "단검") { weaponColor = 0xff5555; wSize = {x:0.1, y:0.8, z:0.1}; }
+            else if(selectedWeapon === "대검") { weaponColor = 0x888888; wSize = {x:0.4, y:2.2, z:0.1}; }
+
+            const wGeo = new THREE.BoxGeometry(wSize.x, wSize.y, wSize.z);
+            const wMat = new THREE.MeshLambertMaterial({ color: weaponColor });
+            weaponCube = new THREE.Mesh(wGeo, wMat);
+            weaponCube.position.set(0.7, 0, 0.5); // 오른손 위치 대략 고정
+            player.add(weaponCube);
+
+            // 카메라 초기 3인칭 시점 배치
+            updateCameraPosition();
+
+            // 이벤트 리스너 등록
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            window.addEventListener('resize', onWindowResize);
+
+            // 루프 기동
+            animate();
+        }
+
+        // 시점 동기화
+        function updateCameraPosition() {
+            if (!isEvading) {
+                camera.position.set(player.position.x, player.position.y + 4, player.position.z + 6);
+                camera.lookAt(player.position);
+            }
+        }
+
+        // --- 키 입력 핸들러 ---
+        function handleKeyDown(e) {
+            keys[e.code] = true;
+
+            // WASD 스킬 구현 (MP 소모)
+            if(['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+                if(mp >= 15) {
+                    mp -= 15;
+                    updateUIBars();
+                    let skillName = e.code.replace('Key', '');
+                    addLog(`[스킬] ${selectedWeapon} 스킬 [${skillName}] 시전! (-15 MP)`);
+                    
+                    // 스킬 모션 이펙트 (무기 일시적 거대화)
+                    weaponCube.scale.set(2, 2, 2);
+                    setTimeout(() => weaponCube.scale.set(1, 1, 1), 200);
                 } else {
-                    playerHp -= 0.5;
-                    document.getElementById('player-hp').style.width = playerHp + '%';
+                    addLog(`<span style="color:orange;">[경고] 마나가 부족합니다!</span>`);
                 }
             }
 
-            // 게임 오버 조건
-            if (playerHp <= 0) {
-                alert('패배했습니다! 페이지를 새로고침하세요.');
-            } else if (enemyHp <= 0) {
-                alert('승리했습니다! 페이지를 새로고침하세요.');
+            // 회피(Shift + 방향키) 검사
+            if(e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                triggerEvade();
             }
 
-            renderer.render(scene, camera);
+            // 점프(Space + 방향키) 검사
+            if(e.code === 'Space') {
+                triggerJump();
+            }
         }
 
-        // 창 크기 조절 대응
-        window.addEventListener('resize', () => {
+        function handleKeyUp(e) { keys[e.code] = false; }
+        function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        }
 
-        animate();
+        // --- 구르기 회피 구현 (특수 시점 연출) ---
+        function triggerEvade() {
+            let moveX = 0, moveZ = 0;
+            if (keys['ArrowUp']) moveZ = -1;
+            if (keys['ArrowDown']) moveZ = 1;
+            if (keys['ArrowLeft']) moveX = -1;
+            if (keys['ArrowRight']) moveX = 1;
+
+            if((moveX !== 0 || moveZ !== 0) && !isEvading) {
+                isEvading = true;
+                addLog(`[회피] 그 방향으로 구르기 회피!`);
+                
+                let duration = 400; // 0.4초 동안 구르기
+                let start = Date.now();
+
+                function evadeStep() {
+                    let elapsed = Date.now() - start;
+                    let progress = elapsed / duration;
+
+                    if(progress < 1) {
+                        // 플레이어 해당 방향 고속 이동
+                        player.position.x += moveX * 0.15;
+                        player.position.z += moveZ * 0.15;
+
+                        // 시점도 같이 역동적으로 흔들림/회전 연출 (그 방향으로 시점 밀기)
+                        camera.position.set(
+                            player.position.x - (moveX * 2), 
+                            player.position.y + 2, 
+                            player.position.z - (moveZ * 2) + 4
+                        );
+                        camera.lookAt(player.position);
+
+                        requestAnimationFrame(evadeStep);
+                    } else {
+                        // 회피 종료 시 원래 시점 복구
+                        isEvading = false;
+                        updateCameraPosition();
+                    }
+                }
+                evadeStep();
+            }
+        }
+
+        // --- 점프 구현 ---
+        function triggerJump() {
+            if(!isJumping) {
+                isJumping = true;
+                jumpVelocity = 0.25;
+                addLog(`[행동] 방향 점프!`);
+            }
+        }
+
+        // --- 메인 게임 루프 기동 ---
+        function animate() {
+            if(!renderer) return;
+            requestAnimationFrame(animate);
+
+            // 1. 기본 방향키 이동
+            let speed = 0.08;
+            if (!isEvading) {
+                if (keys['ArrowUp']) player.position.z -= speed;
+                if (keys['ArrowDown']) player.position.z += speed;
+                if (keys['ArrowLeft']) player.position.x -= speed;
+                if (keys['ArrowRight']) player.position.x += speed;
+            }
+
+            // 2. 점프 중력 물리 연산
+            if(isJumping) {
+                player.position.y += jumpVelocity;
+                jumpVelocity -= 0.015; // 중력 역활
+
+                // 공중에서 방향키 조합에 따른 관성 이동 증가
+                if (keys['ArrowUp']) player.position.z -= speed * 0.5;
+                if (keys['ArrowDown']) player.position.z += speed * 0.5;
+                if (keys['ArrowLeft']) player.position.x -= speed * 0.5;
+                if (keys['ArrowRight']) player.position.x += speed * 0.5;
+
+                if(player.position.y <= 1) { // 착지 검사
+                    player.position.y = 1;
+                    isJumping = false;
+                    jumpVelocity = 0;
+                }
+            }
+
+            // 3. 카메라 트래킹 (회피중이 아닐 때만)
+            updateCameraPosition();
+
+            // 4. 마나 자연 회복 조금씩
+            if(mp < 100) { mp += 0.05; updateUIBars(); }
+
+            renderer.render(scene, camera);
+        }
     </script>
 </body>
 </html>
