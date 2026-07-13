@@ -208,10 +208,10 @@
         }
 
         function processSelectChar(id) {
-            selectedChar = id;
-            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active'));
-            document.getElementById(`sel-${id}`).classList.add('active');
-            updateModelColor(player1, CHAR_DB[id].color);
+    selectedChar = id; // 여기서 'avenger', 'slayer', 'guardian'이 정확히 대입되어야 합니다.
+    document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active'));
+    document.getElementById(`sel-${id}`).classList.add('active');
+}
         }
 
         function renderCommonWeapons() {
