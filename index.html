@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 구르기 제한 및 콤보 패치</title>
+    <title>3D 락온 아레나 - 연속 구르기 제약 및 콤보 패치</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -46,7 +46,7 @@
         .w-desc { font-size: 11px; color: #aaa; }
         .weapon-slot.active .w-desc { color: #00ffcc; }
 
-        .battle-control-panel { position: relative; }
+        .battle-control-panel { relative; }
         .battle-menu { position: absolute; bottom: 65px; right: 0; width: 220px; background: #0b0f19; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
         .menu-btn { width: 100%; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #ddd; text-align: left; cursor: pointer; font-size: 12px; }
         .ai-selector-label { font-size: 11px; color: #64748b; margin-top: 4px; padding-left: 2px; }
@@ -87,7 +87,7 @@
 
     <div id="start-screen" class="screen">
         <div class="game-title">ARENA LOCK-ON</div>
-        <div class="game-subtitle">COMBO MECHANICS & ROLL LIMIT PATCH</div>
+        <div class="game-subtitle">ROLL OVERLAP LIMIT PATCH</div>
         <button class="btn" onclick="changeScene('lobby')">START</button>
     </div>
 
@@ -155,7 +155,7 @@
                 <div id="hud-p1-label" style="color:#00ff88;">PLAYER</div>
                 <div class="bar-bg"><div id="p1-hp" class="bar-fill"></div></div>
                 <div class="bar-bg" style="height:5px;"><div id="p1-mp" class="bar-fill mp-fill"></div></div>
-                <div style="font-size: 9px; margin-top: 2px; color: #00ffcc;">구르기 가능 스택: <span id="hud-roll-counter">2</span>/2</div>
+                <div style="font-size: 9px; margin-top: 2px; color: #00ffcc;">연속 구르기 제한: <span id="hud-roll-counter">0</span>/2</div>
             </div>
             <div class="status-box" style="align-items:flex-end;">
                 <div id="hud-p2-label" style="color:#ff3366;">ENEMY</div>
@@ -165,8 +165,8 @@
         </div>
         <div id="ui">
             <h4 style="margin:0 0 5px 0; color:#00ffcc;">AI 연습 경기장</h4>
-            <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 (최대 연속 2회)<br>
-            <b>[Space]</b> 점프 (점프 ➡️ 구르기 ➡️ 점프 콤보 연계 가능)<br>
+            <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 (한 번에 연속 2회만 가능)<br>
+            <b>[Space]</b> 점프 (구르기 직후 바로 공중 점프 콤보 연계 가능)<br>
             <b>[스킬]</b> W, A, S, D 사용 가능<br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
         </div>
@@ -312,8 +312,8 @@
                 p2Stats.hp = 100; p2Stats.mp = 100;
                 isGrabbed = false; isRolling = false; 
                 
-                // 콤보 변수 초기화
-                currentRollsUsed = 0;
+                // 연속 입력 핸들링 변수들 초기화
+                comboRollCount = 0;
                 hasComboJumpAvailable = false;
                 
                 lastRegenTime = performance.now(); updateUI();
@@ -352,7 +352,7 @@
             document.getElementById('p1-mp').style.width = `${(p1Stats.mp / p1Stats.maxMp) * 100}%`;
             document.getElementById('p2-hp').style.width = `${p2Stats.hp}%`;
             document.getElementById('p2-mp').style.width = `${p2Stats.mp}%`;
-            document.getElementById('hud-roll-counter').innerText = Math.max(0, 2 - currentRollsUsed);
+            document.getElementById('hud-roll-counter').innerText = comboRollCount;
         }
 
         const player1 = createHumanoidModel(0x00ff88); scene.add(player1);
@@ -364,11 +364,12 @@
         const keys = {}; const projectiles = []; let isGrabbed = false;
         let defaultSpeed = 0.22; let p1VelocityY = 0; const gravity = -0.015; const jumpForce = 0.35; let isGrounded = true;
         
-        // --- 구르기 스택 및 콤보 조건 변수 ---
+        // --- 수정된 연속 구르기 제약 제어 설계 ---
         let isRolling = false; let rollFrames = 0; const rollDuration = 22; const rollSpeed = 0.52; 
         let rollDirection = new THREE.Vector3(); let rollType = 'forward'; 
-        let currentRollsUsed = 0;        // 현재 누적 구르기 사용 횟수
-        let hasComboJumpAvailable = false; // 구르기 종료 후 점프 연계 가능 여부 플래그
+        
+        let comboRollCount = 0;          // 연속 구르기 사용 횟수 (최대 2회)
+        let hasComboJumpAvailable = false; // 구르기 연계 공중 점프 가능 여부
 
         window.addEventListener('keydown', (e) => {
             if (document.getElementById('game-hud').classList.contains('hidden')) return;
@@ -376,21 +377,23 @@
             if(['arrowup','arrowdown','arrowleft','arrowright','space'].includes(codeStr)) e.preventDefault();
             keys[e.key] = true; keys[e.code] = true;
             
-            // 점프 입력 판정 (지상이거나 구르기 후 연계 콤보 플래그가 켜졌을 때)
-            if (e.code === 'Space' && !isRolling) { 
-                if (isGrounded) {
+            // 1. 점프 연계 판정
+            if (e.code === 'Space') { 
+                if (isGrounded && !isRolling) {
                     p1VelocityY = jumpForce; 
                     isGrounded = false;
-                } else if (hasComboJumpAvailable) {
-                    // 점프/구르기/점프 콤보 트리거 작동
-                    p1VelocityY = jumpForce * 0.95; // 콤보 점프 높이 보정
+                } else if (hasComboJumpAvailable && !isRolling) {
+                    // 구르기 직후 보정된 콤보 점프 트리거 작동
+                    p1VelocityY = jumpForce * 0.95; 
                     hasComboJumpAvailable = false; 
                 }
             }
             
-            // 구르기 입력 (1회 진입당 최대 2번 제한 체크)
-            if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !isRolling && currentRollsUsed < 2) {
-                startRoll();
+            // 2. 연속 구르기 판정 (구르기 진행 중이거나 끝난 직후 연속 2회까지만 허용)
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                if (comboRollCount < 2) {
+                    startRoll();
+                }
             }
             
             if (e.code === 'KeyW') useSkill('grab'); if (e.code === 'KeyA') useSkill('dagger');
@@ -416,7 +419,7 @@
             rollDirection.copy(targetDir); 
             isRolling = true; 
             rollFrames = 0;
-            currentRollsUsed++; // 구르기 제한 카운트 업
+            comboRollCount++; // 연속 구르기 카운트 추가
             updateUI();
         }
 
@@ -483,26 +486,32 @@
                 const distanceToEnemy = moveForward.length(); moveForward.normalize();
                 const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-                // 이동 및 구르기 물리 프로세스
+                // 이동 및 구르기 처리
                 if (!isRolling && !isGrabbed) {
                     if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
                     if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
                     if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed);
                     if (keys['ArrowRight']) player1.position.addScaledVector(moveRight, defaultSpeed);
+                    
+                    // 움직이거나 대기하는 일반 상태일 때, 연속 조작이 완전히 멈췄다면 카운트 자연 리셋
+                    if (comboRollCount > 0 && !keys['ShiftLeft'] && !keys['ShiftRight'] && isGrounded) {
+                        comboRollCount = 0;
+                        updateUI();
+                    }
                 } else if (isRolling) {
                     rollFrames++; 
                     player1.position.addScaledVector(rollDirection, rollSpeed);
                     
-                    // 공중 구르기 시 낙하 가속도 상쇄 처리 (공중 콤보 안정성 확보)
+                    // 공중 구르기 중엔 자유 낙하를 일시 멈춰 콤보 쾌감 유지
                     if(!isGrounded) p1VelocityY = 0; 
                     
                     if (rollFrames >= rollDuration) {
                         isRolling = false;
-                        hasComboJumpAvailable = true; // 구르기 해제 직후 콤보 점프 가능성 부여
+                        hasComboJumpAvailable = true; // 구르기 풀리는 순간 점프 연계 활성화
                     }
                 }
 
-                // 점프/중력 역학 프로세스
+                // 점프/중력 시스템
                 if (!isGrounded) {
                     p1VelocityY += gravity; 
                     player1.position.y += p1VelocityY;
@@ -510,8 +519,8 @@
                         player1.position.y = 0; 
                         p1VelocityY = 0; 
                         isGrounded = true; 
-                        currentRollsUsed = 0;        // 착지 시 구르기 카운터 리셋
-                        hasComboJumpAvailable = false; // 착지 시 콤보 리셋
+                        comboRollCount = 0;        // 지상 도달 시 리셋
+                        hasComboJumpAvailable = false;
                         updateUI();
                     }
                 }
