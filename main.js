@@ -485,3 +485,24 @@ processSelectChar('avenger');
 confirmSelection(); 
 changeScene('start'); 
 animate(0);
+// 기존의 전역 바인딩 코드들 바로 아래에 붙여넣기
+window.addEventListener('DOMContentLoaded', () => {
+    // DOM 로드 완료 후 Three.js와 메인 루프를 안전하게 동기화
+    if (typeof THREE !== 'undefined') {
+        processSelectChar('avenger'); 
+        confirmSelection(); 
+        changeScene('start'); 
+        animate(0);
+    } else {
+        // 혹시 스크립트 로드 순서가 꼬였을 경우를 대비해 Three.js 대기 후 실행
+        const checkThree = setInterval(() => {
+            if (typeof THREE !== 'undefined') {
+                clearInterval(checkThree);
+                processSelectChar('avenger'); 
+                confirmSelection(); 
+                changeScene('start'); 
+                animate(0);
+            }
+        }, 50);
+    }
+});
