@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 락온 아레나 - 2회 연속 구르기 버퍼링 패치</title>
+    <title>3D 락온 아레나 - 2회 연속 구르기 착지 후딜레이 패치</title>
     <style>
         html, body { 
             width: 100%; height: 100%; margin: 0; padding: 0; 
@@ -165,9 +165,9 @@
         </div>
         <div id="ui">
             <h4 style="margin:0 0 5px 0; color:#00ffcc;">AI 연습 경기장</h4>
-            <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 (연타 시 매끄럽게 2연속 가능)<br>
-            <b>[Space]</b> 점프 (2회 연속 구른 직후에는 강제 착지 유도)<br>
-            <b>[스킬]</b> W, A, S, D 사용 가능<br>
+            <b>[방향키]</b> 이동 / <b>[Shift]</b> 구르기 (최대 2연속 가능)<br>
+            <b>[Space]</b> 점프 / <b>[스킬]</b> W, A, S, D 사용 가능<br>
+            <span style="color:#ff3366; font-weight:bold;">⚠️ 2회 연속 구른 후 착지 시 약 0.6초간 조작 불가 패널티 경직 발생!</span><br>
             <span id="hud-weapon-desc" style="color:#00ffcc;">-</span>
         </div>
         <div id="sub-view"></div>
@@ -315,6 +315,7 @@
                 comboRollCount = 0;
                 hasComboJumpAvailable = false;
                 rollQueued = false;
+                landingDelayFrames = 0; // 착지 후딜레이 인스턴스 초기화
                 
                 lastRegenTime = performance.now(); updateUI();
             }
@@ -369,15 +370,22 @@
         
         let comboRollCount = 0;          
         let hasComboJumpAvailable = false; 
-        let rollQueued = false; // 두 번째 구르기 예약 버퍼 플래그
+        let rollQueued = false; 
+
+        // 💥 2회 연속 구르기 전용 착지 후딜레이 카운터 (35프레임 = 약 0.6초)
+        let landingDelayFrames = 0;
+        const MAX_LANDING_DELAY = 35; 
 
         window.addEventListener('keydown', (e) => {
             if (document.getElementById('game-hud').classList.contains('hidden')) return;
+            // 💥 착지 후딜레이 경직 상태일 땐 모든 키 입력 차단
+            if (landingDelayFrames > 0) return;
+
             const codeStr = e.code.toLowerCase();
             if(['arrowup','arrowdown','arrowleft','arrowright','space'].includes(codeStr)) e.preventDefault();
             keys[e.key] = true; keys[e.code] = true;
             
-            // 1. 점프 연계 판정
+            // 1. 점프 판정
             if (e.code === 'Space') { 
                 if (isGrounded && !isRolling) {
                     p1VelocityY = jumpForce; 
@@ -388,13 +396,12 @@
                 }
             }
             
-            // 2. 연속 구르기 및 예약 버퍼 판정
+            // 2. 연속 구르기 버퍼 판정
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
                 if (comboRollCount < 2) {
                     if (!isRolling) {
                         startRoll();
                     } else if (comboRollCount === 1) {
-                        // 첫 번째 구르기 액션이 돌고 있을 때 누르면 대기열에 예약
                         rollQueued = true;
                     }
                 }
@@ -490,8 +497,18 @@
                 const distanceToEnemy = moveForward.length(); moveForward.normalize();
                 const moveRight = new THREE.Vector3().crossVectors(moveForward, new THREE.Vector3(0, 1, 0)).normalize();
 
-                // 이동 및 구르기 애니메이션 처리
-                if (!isRolling && !isGrabbed) {
+                // 💥 후딜레이 경직 처리 프레임 계산
+                if (landingDelayFrames > 0) {
+                    landingDelayFrames--;
+                    // 경직 중에는 색상을 일시적으로 붉게 변경하여 시각적 인지 부여
+                    updateModelColor(player1, 0x552222);
+                    if (landingDelayFrames <= 0) {
+                        updateModelColor(player1, CHAR_DB[selectedChar].color);
+                    }
+                }
+
+                // 이동 및 구르기 처리
+                if (!isRolling && !isGrabbed && landingDelayFrames <= 0) {
                     if (keys['ArrowUp'] && distanceToEnemy > 2.2) player1.position.addScaledVector(moveForward, defaultSpeed);
                     if (keys['ArrowDown']) player1.position.addScaledVector(moveForward, -defaultSpeed);
                     if (keys['ArrowLeft']) player1.position.addScaledVector(moveRight, -defaultSpeed);
@@ -510,14 +527,16 @@
                     if (rollFrames >= rollDuration) {
                         isRolling = false;
                         
-                        // 구르기가 완전히 끝난 프레임에 예약(Queue)된 2타 구르기가 있다면 즉시 연계 발동
                         if (rollQueued && comboRollCount < 2) {
                             rollQueued = false;
                             startRoll();
                         } else {
-                            // 2회 연속 구르기가 완료되었을 때 처리
                             if (comboRollCount >= 2) {
-                                hasComboJumpAvailable = false; // 무조건 강제 착지 유도
+                                hasComboJumpAvailable = false; 
+                                // 💥 지상에서 2연속 구르기가 끝난 경우, 공중에 안 뜨더라도 즉시 후딜레이 시작
+                                if (isGrounded) {
+                                    landingDelayFrames = MAX_LANDING_DELAY;
+                                }
                             } else {
                                 hasComboJumpAvailable = true; 
                             }
@@ -525,7 +544,7 @@
                     }
                 }
 
-                // 점프/중력 시스템
+                // 점프/중력 및 착지 시점 판정
                 if (!isGrounded) {
                     p1VelocityY += gravity; 
                     player1.position.y += p1VelocityY;
@@ -533,7 +552,15 @@
                         player1.position.y = 0; 
                         p1VelocityY = 0; 
                         isGrounded = true; 
-                        comboRollCount = 0;        // 지상에 닿으면 카운터 완전 초기화
+                        
+                        // 💥 2회 연속 구른 직후 공중에서 떨어져 땅에 착지한 시점이라면 후딜레이 트리거
+                        if (comboRollCount >= 2) {
+                            landingDelayFrames = MAX_LANDING_DELAY;
+                            // 경직이 걸리므로 기존 입력 버퍼들을 전부 강제 강하 초기화
+                            for (let key in keys) keys[key] = false;
+                        }
+                        
+                        comboRollCount = 0; 
                         rollQueued = false;
                         hasComboJumpAvailable = false;
                         updateUI();
