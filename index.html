@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임 - 타겟 자동조준 버전</title>
+    <title>3D 3인칭 AI 대전 게임 - 타겟 시선 고정 버전</title>
     <style>
         body {
             margin: 0;
@@ -109,7 +109,7 @@
     </div>
 
     <div id="controls-hint">
-        <b>이동:</b> 방향키 | <b>점프:</b> Space (3초 쿨) | <b>회피:</b> Shift (5초 쿨) | <b>근접공격:</b> Q<br>
+        <b>이동:</b> 방향키 (시선 상대 고정) | <b>점프:</b> Space (3초 쿨) | <b>회피:</b> Shift (5초 쿨) | <b>근접공격:</b> Q<br>
         <b>상대 자동조준 투사체:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
     </div>
 
@@ -185,8 +185,6 @@
             player = createCharacter(0x3498db, new THREE.Vector3(0, 0, 10));
             ai = createCharacter(0xe74c3c, new THREE.Vector3(0, 0, -10));
 
-            player.rotation.y = Math.PI;
-
             window.addEventListener('keydown', e => keys[e.code] = true);
             window.addEventListener('keyup', e => keys[e.code] = false);
             window.addEventListener('resize', onWindowResize);
@@ -235,10 +233,10 @@
             return group;
         }
 
-        // 상대방(AI)을 무조건 향하는 방향 벡터 계산
+        // 상대방(AI)을 향하는 방향 벡터 계산
         function getDirToTarget() {
             const dir = new THREE.Vector3().subVectors(ai.position, player.position);
-            dir.y = 0; // 수평 발사
+            dir.y = 0; // 수평 기준
             return dir.normalize();
         }
 
@@ -368,9 +366,12 @@
             } else if (isMoving) {
                 player.position.x += moveDir.x * speed;
                 player.position.z += moveDir.z * speed;
+            }
 
-                const targetRotation = Math.atan2(moveDir.x, moveDir.z);
-                player.rotation.y = targetRotation;
+            // 시선 처리: 회피 중이 아닐 때 항시 상대를 바라보도록 고정
+            if (!isDodging) {
+                const dirToAI = getDirToTarget();
+                player.rotation.y = Math.atan2(dirToAI.x, dirToAI.z);
             }
 
             // 2. 점프 (Space)
@@ -415,7 +416,7 @@
                 }
             }
 
-            // 4. [WASD] 상대방 자동조준 투사체 발사
+            // 4. [WASD] 투사체 발사
             if (skillCooldown <= 0 && !isDodging) {
                 if (keys['KeyW']) triggerProjectileSkill('W');
                 else if (keys['KeyA']) triggerProjectileSkill('A');
@@ -437,14 +438,13 @@
         }
 
         function triggerProjectileSkill(type) {
-            // 무조건 상대(AI)를 바라보는 방향 계산
             const targetDir = getDirToTarget();
 
             if (type === 'W') { // 파이어볼
                 skillCooldown = 15;
                 spawnProjectile(player.position, targetDir, 0.45, 0.3, 0xffa500, 15, 'player');
             } 
-            else if (type === 'A') { // 3방향 확산탄 (상대방 중심 부채꼴)
+            else if (type === 'A') { // 3방향 확산탄
                 skillCooldown = 25;
                 const leftDir = targetDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3);
                 const rightDir = targetDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3);
@@ -462,7 +462,7 @@
                 spawnProjectile(player.position, targetDir, 0.4, 0.2, 0xffff00, 12, 'player');
                 setTimeout(() => {
                     if (!isGameOver) {
-                        const newTargetDir = getDirToTarget(); // 2번째 발사 시점의 상대 위치 재계산
+                        const newTargetDir = getDirToTarget();
                         spawnProjectile(player.position, newTargetDir, 0.4, 0.2, 0xffff00, 12, 'player');
                     }
                 }, 150);
@@ -531,7 +531,6 @@
             document.getElementById('game-over').style.display = 'none';
 
             player.position.set(0, 0, 10);
-            player.rotation.y = Math.PI;
             ai.position.set(0, 0, -10);
 
             isJumping = false;
