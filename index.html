@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임 - 버그 수정 버전</title>
+    <title>3D 3인칭 AI 대전 게임 - 타겟 자동조준 버전</title>
     <style>
         body {
             margin: 0;
@@ -110,7 +110,7 @@
 
     <div id="controls-hint">
         <b>이동:</b> 방향키 | <b>점프:</b> Space (3초 쿨) | <b>회피:</b> Shift (5초 쿨) | <b>근접공격:</b> Q<br>
-        <b>투사체 스킬:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
+        <b>상대 자동조준 투사체:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
     </div>
 
     <div id="game-over">
@@ -185,7 +185,6 @@
             player = createCharacter(0x3498db, new THREE.Vector3(0, 0, 10));
             ai = createCharacter(0xe74c3c, new THREE.Vector3(0, 0, -10));
 
-            // 플레이어가 적(북쪽, -Z)을 향하도록 초기 회전 설정
             player.rotation.y = Math.PI;
 
             window.addEventListener('keydown', e => keys[e.code] = true);
@@ -212,7 +211,6 @@
             head.castShadow = true;
             group.add(head);
 
-            // 정면 눈 표시 (바라보는 방향 확인용)
             const eyeGeo = new THREE.BoxGeometry(0.3, 0.1, 0.2);
             const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
             const eyes = new THREE.Mesh(eyeGeo, eyeMat);
@@ -237,7 +235,13 @@
             return group;
         }
 
-        // 캐릭터 정면 바라보는 수평 단위 벡터 계산 (수정 핵심)
+        // 상대방(AI)을 무조건 향하는 방향 벡터 계산
+        function getDirToTarget() {
+            const dir = new THREE.Vector3().subVectors(ai.position, player.position);
+            dir.y = 0; // 수평 발사
+            return dir.normalize();
+        }
+
         function getPlayerForward() {
             const forward = new THREE.Vector3(0, 0, 1);
             forward.applyQuaternion(player.quaternion);
@@ -252,7 +256,7 @@
             const mesh = new THREE.Mesh(geo, mat);
 
             mesh.position.copy(position);
-            mesh.position.y = 1.0; // 허리 높이 발사
+            mesh.position.y = 1.0;
             scene.add(mesh);
 
             projectiles.push({
@@ -269,7 +273,6 @@
         function updateCooldowns() {
             const now = Date.now();
 
-            // 점프 (3초)
             jumpTimestamps = jumpTimestamps.filter(t => now - t < JUMP_COOLDOWN_MS);
             const availableJumps = 2 - jumpTimestamps.length;
             document.getElementById('jump-count').innerText = `${availableJumps} / 2`;
@@ -281,7 +284,6 @@
                 document.getElementById('jump-cd').innerText = '';
             }
 
-            // 회피 (5초)
             dodgeTimestamps = dodgeTimestamps.filter(t => now - t < DODGE_COOLDOWN_MS);
             const availableDodges = 2 - dodgeTimestamps.length;
             document.getElementById('dodge-count').innerText = `${availableDodges} / 2`;
@@ -361,7 +363,7 @@
                 if (dodgeTimer <= 0) {
                     isDodging = false;
                     isInvincible = false;
-                    player.userData.bodyMesh.rotation.set(0, 0, 0); // 회전 완전 복구
+                    player.userData.bodyMesh.rotation.set(0, 0, 0);
                 }
             } else if (isMoving) {
                 player.position.x += moveDir.x * speed;
@@ -371,7 +373,7 @@
                 player.rotation.y = targetRotation;
             }
 
-            // 2. 점프 (Space) & 고도 고정 (화면 다운 문제 예방)
+            // 2. 점프 (Space)
             if (spacePressed && !spacePressedLastFrame && jumpTimestamps.length < 2) {
                 isJumping = true;
                 playerVelocityY = 0.22;
@@ -389,10 +391,9 @@
                     playerVelocityY = 0;
                 }
             } else {
-                player.position.y = 0; // 점프 아닐 때는 Y축 완전 고정
+                player.position.y = 0;
             }
 
-            // 경기장 이탈 방지
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
@@ -414,7 +415,7 @@
                 }
             }
 
-            // 4. [WASD] 투사체 스킬 조작
+            // 4. [WASD] 상대방 자동조준 투사체 발사
             if (skillCooldown <= 0 && !isDodging) {
                 if (keys['KeyW']) triggerProjectileSkill('W');
                 else if (keys['KeyA']) triggerProjectileSkill('A');
@@ -424,7 +425,7 @@
 
             if (skillCooldown > 0) skillCooldown--;
 
-            // 3인칭 카메라 (화면 처짐 완벽 방지)
+            // 3인칭 카메라
             const cameraHeight = 6.0;
             const cameraDistance = 9.0;
             camera.position.set(
@@ -436,32 +437,33 @@
         }
 
         function triggerProjectileSkill(type) {
-            const forward = getPlayerForward();
+            // 무조건 상대(AI)를 바라보는 방향 계산
+            const targetDir = getDirToTarget();
 
             if (type === 'W') { // 파이어볼
                 skillCooldown = 15;
-                spawnProjectile(player.position, forward, 0.45, 0.3, 0xffa500, 15, 'player');
+                spawnProjectile(player.position, targetDir, 0.45, 0.3, 0xffa500, 15, 'player');
             } 
-            else if (type === 'A') { // 3방향 확산탄
+            else if (type === 'A') { // 3방향 확산탄 (상대방 중심 부채꼴)
                 skillCooldown = 25;
-                const leftDir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3);
-                const rightDir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3);
+                const leftDir = targetDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3);
+                const rightDir = targetDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3);
 
-                spawnProjectile(player.position, forward, 0.35, 0.25, 0x00ffff, 10, 'player');
+                spawnProjectile(player.position, targetDir, 0.35, 0.25, 0x00ffff, 10, 'player');
                 spawnProjectile(player.position, leftDir, 0.35, 0.25, 0x00ffff, 10, 'player');
                 spawnProjectile(player.position, rightDir, 0.35, 0.25, 0x00ffff, 10, 'player');
             } 
             else if (type === 'S') { // 대형 에너지볼
                 skillCooldown = 30;
-                spawnProjectile(player.position, forward, 0.2, 0.7, 0x9b59b6, 25, 'player');
+                spawnProjectile(player.position, targetDir, 0.2, 0.7, 0x9b59b6, 25, 'player');
             } 
             else if (type === 'D') { // 2연사 샷
                 skillCooldown = 25;
-                spawnProjectile(player.position, forward, 0.4, 0.2, 0xffff00, 12, 'player');
+                spawnProjectile(player.position, targetDir, 0.4, 0.2, 0xffff00, 12, 'player');
                 setTimeout(() => {
                     if (!isGameOver) {
-                        const newForward = getPlayerForward();
-                        spawnProjectile(player.position, newForward, 0.4, 0.2, 0xffff00, 12, 'player');
+                        const newTargetDir = getDirToTarget(); // 2번째 발사 시점의 상대 위치 재계산
+                        spawnProjectile(player.position, newTargetDir, 0.4, 0.2, 0xffff00, 12, 'player');
                     }
                 }, 150);
             }
