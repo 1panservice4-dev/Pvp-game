@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임 - 캐릭터 시선 기준 이동</title>
+    <title>3D 3인칭 AI 대전 게임 - 타겟 록온 카메라 시점</title>
     <style>
         body {
             margin: 0;
@@ -109,7 +109,7 @@
     </div>
 
     <div id="controls-hint">
-        <b>이동:</b> 방향키 (↑: 전진, ↓: 후진, ←/→: 좌우 이동) | <b>점프:</b> Space | <b>회피:</b> Shift | <b>근접공격:</b> Q<br>
+        <b>이동:</b> 방향키 (시선 록온 기준) | <b>점프:</b> Space | <b>회피:</b> Shift | <b>근접공격:</b> Q<br>
         <b>상대 자동조준 투사체:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
     </div>
 
@@ -333,8 +333,8 @@
             // 시선(상대방) 기준 입력 방향 계산
             if (keys['ArrowUp']) moveDir.add(forward);       // 상대방 쪽으로 전진
             if (keys['ArrowDown']) moveDir.sub(forward);     // 상대방에게서 후진
-            if (keys['ArrowRight']) moveDir.add(right);      // 우측 스트레이프
-            if (keys['ArrowLeft']) moveDir.sub(right);       // 좌측 스트레이프
+            if (keys['ArrowRight']) moveDir.add(right);      // 우측 이동
+            if (keys['ArrowLeft']) moveDir.sub(right);       // 좌측 이동
 
             let isMoving = moveDir.lengthSq() > 0;
             if (isMoving) {
@@ -370,7 +370,7 @@
                 player.position.z += moveDir.z * speed;
             }
 
-            // 회피 중이 아닐 때는 무조건 상대를 바라보도록 고정
+            // 캐릭터 회전: 무조건 상대를 바라봄
             if (!isDodging) {
                 player.rotation.y = Math.atan2(forward.x, forward.z);
             }
@@ -427,15 +427,19 @@
 
             if (skillCooldown > 0) skillCooldown--;
 
-            // 3인칭 카메라
-            const cameraHeight = 6.0;
-            const cameraDistance = 9.0;
+            // 5. [내 시선] 타겟 록온 카메라 업데이트
+            const cameraHeight = 5.0;     // 카메라 높이
+            const cameraDistance = 8.0;   // 플레이어와의 거리
+
+            // 카메라 위치: 플레이어 위치 기준, 상대의 반대 방향(뒤쪽)으로 배치
             camera.position.set(
-                player.position.x,
+                player.position.x - forward.x * cameraDistance,
                 player.position.y + cameraHeight,
-                player.position.z + cameraDistance
+                player.position.z - forward.z * cameraDistance
             );
-            camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
+
+            // 카메라 시선: 상대를 중앙에 담도록 바라봄 (약간 높게 조준)
+            camera.lookAt(ai.position.x, ai.position.y + 1.2, ai.position.z);
         }
 
         function triggerProjectileSkill(type) {
