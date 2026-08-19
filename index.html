@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임 - 타겟 시선 고정 버전</title>
+    <title>3D 3인칭 AI 대전 게임 - 캐릭터 시선 기준 이동</title>
     <style>
         body {
             margin: 0;
@@ -109,7 +109,7 @@
     </div>
 
     <div id="controls-hint">
-        <b>이동:</b> 방향키 (시선 상대 고정) | <b>점프:</b> Space (3초 쿨) | <b>회피:</b> Shift (5초 쿨) | <b>근접공격:</b> Q<br>
+        <b>이동:</b> 방향키 (↑: 전진, ↓: 후진, ←/→: 좌우 이동) | <b>점프:</b> Space | <b>회피:</b> Shift | <b>근접공격:</b> Q<br>
         <b>상대 자동조준 투사체:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
     </div>
 
@@ -233,18 +233,11 @@
             return group;
         }
 
-        // 상대방(AI)을 향하는 방향 벡터 계산
+        // 상대방(AI)을 향하는 방향 벡터 (전방 Vector)
         function getDirToTarget() {
             const dir = new THREE.Vector3().subVectors(ai.position, player.position);
             dir.y = 0; // 수평 기준
             return dir.normalize();
-        }
-
-        function getPlayerForward() {
-            const forward = new THREE.Vector3(0, 0, 1);
-            forward.applyQuaternion(player.quaternion);
-            forward.y = 0;
-            return forward.normalize();
         }
 
         // 투사체 생성
@@ -329,15 +322,24 @@
             updateCooldowns();
 
             const speed = 0.15;
-            let moveX = 0, moveZ = 0;
 
-            if (keys['ArrowUp']) moveZ -= 1;
-            if (keys['ArrowDown']) moveZ += 1;
-            if (keys['ArrowLeft']) moveX -= 1;
-            if (keys['ArrowRight']) moveX += 1;
+            // 시선 방향 (전방 벡터)
+            const forward = getDirToTarget();
+            // 전방 벡터의 우측 직교 벡터 (우측 Vector)
+            const right = new THREE.Vector3(-forward.z, 0, forward.x);
 
-            let isMoving = (moveX !== 0 || moveZ !== 0);
-            let moveDir = new THREE.Vector3(moveX, 0, moveZ).normalize();
+            let moveDir = new THREE.Vector3();
+
+            // 시선(상대방) 기준 입력 방향 계산
+            if (keys['ArrowUp']) moveDir.add(forward);       // 상대방 쪽으로 전진
+            if (keys['ArrowDown']) moveDir.sub(forward);     // 상대방에게서 후진
+            if (keys['ArrowRight']) moveDir.add(right);      // 우측 스트레이프
+            if (keys['ArrowLeft']) moveDir.sub(right);       // 좌측 스트레이프
+
+            let isMoving = moveDir.lengthSq() > 0;
+            if (isMoving) {
+                moveDir.normalize();
+            }
 
             const shiftPressed = keys['ShiftLeft'] || keys['ShiftRight'];
             const spacePressed = keys['Space'];
@@ -347,7 +349,7 @@
                 isDodging = true;
                 dodgeTimer = 15;
                 isInvincible = true;
-                dodgeDir = isMoving ? moveDir : getPlayerForward();
+                dodgeDir = isMoving ? moveDir.clone() : forward.clone();
                 dodgeTimestamps.push(Date.now());
             }
             shiftPressedLastFrame = shiftPressed;
@@ -368,10 +370,9 @@
                 player.position.z += moveDir.z * speed;
             }
 
-            // 시선 처리: 회피 중이 아닐 때 항시 상대를 바라보도록 고정
+            // 회피 중이 아닐 때는 무조건 상대를 바라보도록 고정
             if (!isDodging) {
-                const dirToAI = getDirToTarget();
-                player.rotation.y = Math.atan2(dirToAI.x, dirToAI.z);
+                player.rotation.y = Math.atan2(forward.x, forward.z);
             }
 
             // 2. 점프 (Space)
