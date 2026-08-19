@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임</title>
+    <title>3D 3인칭 AI 대전 게임 - 버그 수정 버전</title>
     <style>
         body {
             margin: 0;
@@ -130,14 +130,14 @@
         let isJumping = false;
         let isDodging = false;
         let dodgeTimer = 0;
-        let dodgeDir = new THREE.Vector3(0, 0, 1);
+        let dodgeDir = new THREE.Vector3(0, 0, -1);
         let isInvincible = false;
 
         // 스택 & 쿨타임 시스템
         let jumpTimestamps = [];
         let dodgeTimestamps = [];
-        const JUMP_COOLDOWN_MS = 3000;   // 점프 쿨타임: 3초
-        const DODGE_COOLDOWN_MS = 5000;  // 회피 쿨타임: 5초로 증가
+        const JUMP_COOLDOWN_MS = 3000;   // 점프 쿨타임 3초
+        const DODGE_COOLDOWN_MS = 5000;  // 회피 쿨타임 5초
 
         let spacePressedLastFrame = false;
         let shiftPressedLastFrame = false;
@@ -185,6 +185,9 @@
             player = createCharacter(0x3498db, new THREE.Vector3(0, 0, 10));
             ai = createCharacter(0xe74c3c, new THREE.Vector3(0, 0, -10));
 
+            // 플레이어가 적(북쪽, -Z)을 향하도록 초기 회전 설정
+            player.rotation.y = Math.PI;
+
             window.addEventListener('keydown', e => keys[e.code] = true);
             window.addEventListener('keyup', e => keys[e.code] = false);
             window.addEventListener('resize', onWindowResize);
@@ -203,12 +206,18 @@
             group.add(body);
 
             const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
-            headGeo.translate(0, 0, 0.15); // 전방 방향 시각적 구분
             const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
             const head = new THREE.Mesh(headGeo, headMat);
             head.position.y = 1.8;
             head.castShadow = true;
             group.add(head);
+
+            // 정면 눈 표시 (바라보는 방향 확인용)
+            const eyeGeo = new THREE.BoxGeometry(0.3, 0.1, 0.2);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+            const eyes = new THREE.Mesh(eyeGeo, eyeMat);
+            eyes.position.set(0, 1.85, 0.35);
+            group.add(eyes);
 
             const swordGroup = new THREE.Group();
             const swordGeo = new THREE.BoxGeometry(0.1, 1.2, 0.1);
@@ -228,6 +237,14 @@
             return group;
         }
 
+        // 캐릭터 정면 바라보는 수평 단위 벡터 계산 (수정 핵심)
+        function getPlayerForward() {
+            const forward = new THREE.Vector3(0, 0, 1);
+            forward.applyQuaternion(player.quaternion);
+            forward.y = 0;
+            return forward.normalize();
+        }
+
         // 투사체 생성
         function spawnProjectile(position, direction, speed, size, color, damage, owner) {
             const geo = new THREE.SphereGeometry(size, 16, 16);
@@ -235,7 +252,7 @@
             const mesh = new THREE.Mesh(geo, mat);
 
             mesh.position.copy(position);
-            mesh.position.y = 1.0;
+            mesh.position.y = 1.0; // 허리 높이 발사
             scene.add(mesh);
 
             projectiles.push({
@@ -306,15 +323,6 @@
             }
         }
 
-        function getPlayerForward() {
-            // 플레이어가 전방을 정확히 바라보는 벡터 추출
-            return new THREE.Vector3(
-                Math.sin(player.rotation.y),
-                0,
-                Math.cos(player.rotation.y)
-            ).normalize();
-        }
-
         function updatePlayer() {
             if (isGameOver) return;
 
@@ -334,7 +342,7 @@
             const shiftPressed = keys['ShiftLeft'] || keys['ShiftRight'];
             const spacePressed = keys['Space'];
 
-            // 1. 회피 (Shift - 5초 쿨타임)
+            // 1. 회피 (Shift)
             if (shiftPressed && !shiftPressedLastFrame && dodgeTimestamps.length < 2 && !isDodging) {
                 isDodging = true;
                 dodgeTimer = 15;
@@ -353,7 +361,7 @@
                 if (dodgeTimer <= 0) {
                     isDodging = false;
                     isInvincible = false;
-                    player.userData.bodyMesh.rotation.x = 0;
+                    player.userData.bodyMesh.rotation.set(0, 0, 0); // 회전 완전 복구
                 }
             } else if (isMoving) {
                 player.position.x += moveDir.x * speed;
@@ -363,7 +371,7 @@
                 player.rotation.y = targetRotation;
             }
 
-            // 2. 점프 (Space)
+            // 2. 점프 (Space) & 고도 고정 (화면 다운 문제 예방)
             if (spacePressed && !spacePressedLastFrame && jumpTimestamps.length < 2) {
                 isJumping = true;
                 playerVelocityY = 0.22;
@@ -380,8 +388,11 @@
                     isJumping = false;
                     playerVelocityY = 0;
                 }
+            } else {
+                player.position.y = 0; // 점프 아닐 때는 Y축 완전 고정
             }
 
+            // 경기장 이탈 방지
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
@@ -413,12 +424,15 @@
 
             if (skillCooldown > 0) skillCooldown--;
 
-            // 3인칭 카메라
-            const cameraOffset = new THREE.Vector3(0, 5, 8);
-            camera.position.x = player.position.x + cameraOffset.x;
-            camera.position.y = player.position.y + cameraOffset.y;
-            camera.position.z = player.position.z + cameraOffset.z;
-            camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+            // 3인칭 카메라 (화면 처짐 완벽 방지)
+            const cameraHeight = 6.0;
+            const cameraDistance = 9.0;
+            camera.position.set(
+                player.position.x,
+                player.position.y + cameraHeight,
+                player.position.z + cameraDistance
+            );
+            camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
         }
 
         function triggerProjectileSkill(type) {
@@ -515,7 +529,9 @@
             document.getElementById('game-over').style.display = 'none';
 
             player.position.set(0, 0, 10);
+            player.rotation.y = Math.PI;
             ai.position.set(0, 0, -10);
+
             isJumping = false;
             isDodging = false;
             isInvincible = false;
