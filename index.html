@@ -133,13 +133,12 @@
         let dodgeDir = new THREE.Vector3(0, 0, -1);
         let isInvincible = false;
 
-        // 점프 / 회피 스택 & 쿨타임 시스템 (최대 2회, 3초 쿨타임)
-        let jumpCharges = 2;
-        let dodgeCharges = 2;
-        let jumpCooldownTime = 3;
-        let dodgeCooldownTime = 3;
+        // 타임스탬프 기반 스택 및 쿨타임 시스템 (각 3초)
+        let jumpTimestamps = [];
+        let dodgeTimestamps = [];
+        const COOLDOWN_MS = 3000; // 3초
 
-        // 키 연속 입력 방지용 플래그
+        // 키 입력 중복 방지 플래그
         let spacePressedLastFrame = false;
         let shiftPressedLastFrame = false;
 
@@ -229,25 +228,29 @@
         function updateCooldowns() {
             const now = Date.now();
 
-            // 점프 쿨타임 처리 (3초)
-            if (jumpCharges < 2 && now >= jumpCooldownTime) {
-                jumpCharges = 2;
-                document.getElementById('jump-cd').innerText = '';
-            } else if (jumpCharges < 2) {
-                const remain = ((jumpCooldownTime - now) / 1000).toFixed(1);
+            // 3초가 지난 점프 타임스탬프 제거 (스택 회복)
+            jumpTimestamps = jumpTimestamps.filter(t => now - t < COOLDOWN_MS);
+            const availableJumps = 2 - jumpTimestamps.length;
+            document.getElementById('jump-count').innerText = `${availableJumps} / 2`;
+            if (jumpTimestamps.length > 0) {
+                const oldestJump = jumpTimestamps[0];
+                const remain = ((COOLDOWN_MS - (now - oldestJump)) / 1000).toFixed(1);
                 document.getElementById('jump-cd').innerText = `(${remain}초)`;
+            } else {
+                document.getElementById('jump-cd').innerText = '';
             }
-            document.getElementById('jump-count').innerText = `${jumpCharges} / 2`;
 
-            // 회피 쿨타임 처리 (3초)
-            if (dodgeCharges < 2 && now >= dodgeCooldownTime) {
-                dodgeCharges = 2;
-                document.getElementById('dodge-cd').innerText = '';
-            } else if (dodgeCharges < 2) {
-                const remain = ((dodgeCooldownTime - now) / 1000).toFixed(1);
+            // 3초가 지난 회피 타임스탬프 제거 (스택 회복)
+            dodgeTimestamps = dodgeTimestamps.filter(t => now - t < COOLDOWN_MS);
+            const availableDodges = 2 - dodgeTimestamps.length;
+            document.getElementById('dodge-count').innerText = `${availableDodges} / 2`;
+            if (dodgeTimestamps.length > 0) {
+                const oldestDodge = dodgeTimestamps[0];
+                const remain = ((COOLDOWN_MS - (now - oldestDodge)) / 1000).toFixed(1);
                 document.getElementById('dodge-cd').innerText = `(${remain}초)`;
+            } else {
+                document.getElementById('dodge-cd').innerText = '';
             }
-            document.getElementById('dodge-count').innerText = `${dodgeCharges} / 2`;
         }
 
         function updatePlayer() {
@@ -269,17 +272,14 @@
             const shiftPressed = keys['ShiftLeft'] || keys['ShiftRight'];
             const spacePressed = keys['Space'];
 
-            // 1. 회피 (Shift) - 스택 차감 및 쿨타임 적용
-            if (shiftPressed && !shiftPressedLastFrame && dodgeCharges > 0 && !isDodging) {
+            // 1. 회피 (Shift)
+            if (shiftPressed && !shiftPressedLastFrame && dodgeTimestamps.length < 2 && !isDodging) {
                 isDodging = true;
                 dodgeTimer = 15;
                 isInvincible = true;
                 dodgeDir = isMoving ? moveDir : new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
 
-                dodgeCharges--;
-                if (dodgeCharges === 0) {
-                    dodgeCooldownTime = Date.now() + 3000; // 3초 쿨타임
-                }
+                dodgeTimestamps.push(Date.now()); // 사용 시각 기록
             }
             shiftPressedLastFrame = shiftPressed;
 
@@ -302,15 +302,12 @@
                 player.rotation.y = targetRotation;
             }
 
-            // 2. 점프 (Space) - 스택 차감, 공중 이중 점프 지원 및 3초 쿨타임
-            if (spacePressed && !spacePressedLastFrame && jumpCharges > 0) {
+            // 2. 점프 (Space)
+            if (spacePressed && !spacePressedLastFrame && jumpTimestamps.length < 2) {
                 isJumping = true;
                 playerVelocityY = 0.22;
 
-                jumpCharges--;
-                if (jumpCharges === 0) {
-                    jumpCooldownTime = Date.now() + 3000; // 3초 쿨타임
-                }
+                jumpTimestamps.push(Date.now()); // 사용 시각 기록
             }
             spacePressedLastFrame = spacePressed;
 
@@ -325,7 +322,7 @@
                 }
             }
 
-            // 경기장 제한
+            // 경기장 외곽 제한
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
@@ -442,10 +439,8 @@
             isInvincible = false;
             isGameOver = false;
 
-            jumpCharges = 2;
-            dodgeCharges = 2;
-            jumpCooldownTime = 0;
-            dodgeCooldownTime = 0;
+            jumpTimestamps = [];
+            dodgeTimestamps = [];
         }
 
         function onWindowResize() {
