@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임 - 투사체 스킬 버전</title>
+    <title>3D 3인칭 AI 대전 게임</title>
     <style>
         body {
             margin: 0;
@@ -109,7 +109,7 @@
     </div>
 
     <div id="controls-hint">
-        <b>이동:</b> 방향키 | <b>점프:</b> Space | <b>회피:</b> Shift | <b>근접공격:</b> Q<br>
+        <b>이동:</b> 방향키 | <b>점프:</b> Space (3초 쿨) | <b>회피:</b> Shift (5초 쿨) | <b>근접공격:</b> Q<br>
         <b>투사체 스킬:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
     </div>
 
@@ -130,13 +130,14 @@
         let isJumping = false;
         let isDodging = false;
         let dodgeTimer = 0;
-        let dodgeDir = new THREE.Vector3(0, 0, -1);
+        let dodgeDir = new THREE.Vector3(0, 0, 1);
         let isInvincible = false;
 
         // 스택 & 쿨타임 시스템
         let jumpTimestamps = [];
         let dodgeTimestamps = [];
-        const COOLDOWN_MS = 3000;
+        const JUMP_COOLDOWN_MS = 3000;   // 점프 쿨타임: 3초
+        const DODGE_COOLDOWN_MS = 5000;  // 회피 쿨타임: 5초로 증가
 
         let spacePressedLastFrame = false;
         let shiftPressedLastFrame = false;
@@ -202,6 +203,7 @@
             group.add(body);
 
             const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
+            headGeo.translate(0, 0, 0.15); // 전방 방향 시각적 구분
             const headMat = new THREE.MeshStandardMaterial({ color: 0xffdbac });
             const head = new THREE.Mesh(headGeo, headMat);
             head.position.y = 1.8;
@@ -226,14 +228,14 @@
             return group;
         }
 
-        // 투사체 생성 함수
+        // 투사체 생성
         function spawnProjectile(position, direction, speed, size, color, damage, owner) {
             const geo = new THREE.SphereGeometry(size, 16, 16);
             const mat = new THREE.MeshBasicMaterial({ color: color });
             const mesh = new THREE.Mesh(geo, mat);
 
             mesh.position.copy(position);
-            mesh.position.y = 1.0; // 허리 높이에서 발사
+            mesh.position.y = 1.0;
             scene.add(mesh);
 
             projectiles.push({
@@ -243,30 +245,32 @@
                 radius: size,
                 damage: damage,
                 owner: owner,
-                life: 120 // 프레임 수명
+                life: 120
             });
         }
 
         function updateCooldowns() {
             const now = Date.now();
 
-            jumpTimestamps = jumpTimestamps.filter(t => now - t < COOLDOWN_MS);
+            // 점프 (3초)
+            jumpTimestamps = jumpTimestamps.filter(t => now - t < JUMP_COOLDOWN_MS);
             const availableJumps = 2 - jumpTimestamps.length;
             document.getElementById('jump-count').innerText = `${availableJumps} / 2`;
             if (jumpTimestamps.length > 0) {
                 const oldestJump = jumpTimestamps[0];
-                const remain = ((COOLDOWN_MS - (now - oldestJump)) / 1000).toFixed(1);
+                const remain = ((JUMP_COOLDOWN_MS - (now - oldestJump)) / 1000).toFixed(1);
                 document.getElementById('jump-cd').innerText = `(${remain}초)`;
             } else {
                 document.getElementById('jump-cd').innerText = '';
             }
 
-            dodgeTimestamps = dodgeTimestamps.filter(t => now - t < COOLDOWN_MS);
+            // 회피 (5초)
+            dodgeTimestamps = dodgeTimestamps.filter(t => now - t < DODGE_COOLDOWN_MS);
             const availableDodges = 2 - dodgeTimestamps.length;
             document.getElementById('dodge-count').innerText = `${availableDodges} / 2`;
             if (dodgeTimestamps.length > 0) {
                 const oldestDodge = dodgeTimestamps[0];
-                const remain = ((COOLDOWN_MS - (now - oldestDodge)) / 1000).toFixed(1);
+                const remain = ((DODGE_COOLDOWN_MS - (now - oldestDodge)) / 1000).toFixed(1);
                 document.getElementById('dodge-cd').innerText = `(${remain}초)`;
             } else {
                 document.getElementById('dodge-cd').innerText = '';
@@ -295,12 +299,20 @@
                     }
                 }
 
-                // 경기장 이탈 / 충돌 / 수명 다함 시 제거
                 if (hit || p.life <= 0 || Math.abs(p.mesh.position.x) > 20 || Math.abs(p.mesh.position.z) > 20) {
                     scene.remove(p.mesh);
                     projectiles.splice(i, 1);
                 }
             }
+        }
+
+        function getPlayerForward() {
+            // 플레이어가 전방을 정확히 바라보는 벡터 추출
+            return new THREE.Vector3(
+                Math.sin(player.rotation.y),
+                0,
+                Math.cos(player.rotation.y)
+            ).normalize();
         }
 
         function updatePlayer() {
@@ -322,12 +334,12 @@
             const shiftPressed = keys['ShiftLeft'] || keys['ShiftRight'];
             const spacePressed = keys['Space'];
 
-            // 1. 회피 (Shift)
+            // 1. 회피 (Shift - 5초 쿨타임)
             if (shiftPressed && !shiftPressedLastFrame && dodgeTimestamps.length < 2 && !isDodging) {
                 isDodging = true;
                 dodgeTimer = 15;
                 isInvincible = true;
-                dodgeDir = isMoving ? moveDir : new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+                dodgeDir = isMoving ? moveDir : getPlayerForward();
                 dodgeTimestamps.push(Date.now());
             }
             shiftPressedLastFrame = shiftPressed;
@@ -370,7 +382,6 @@
                 }
             }
 
-            // 경기장 제한
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
@@ -411,14 +422,13 @@
         }
 
         function triggerProjectileSkill(type) {
-            // 플레이어가 바라보는 방향 계산
-            const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+            const forward = getPlayerForward();
 
-            if (type === 'W') { // 파이어볼 (빠른 고속탄)
+            if (type === 'W') { // 파이어볼
                 skillCooldown = 15;
                 spawnProjectile(player.position, forward, 0.45, 0.3, 0xffa500, 15, 'player');
             } 
-            else if (type === 'A') { // 3방향 샷
+            else if (type === 'A') { // 3방향 확산탄
                 skillCooldown = 25;
                 const leftDir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3);
                 const rightDir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3);
@@ -427,15 +437,18 @@
                 spawnProjectile(player.position, leftDir, 0.35, 0.25, 0x00ffff, 10, 'player');
                 spawnProjectile(player.position, rightDir, 0.35, 0.25, 0x00ffff, 10, 'player');
             } 
-            else if (type === 'S') { // 대형 에너시볼 (느리고 큼)
+            else if (type === 'S') { // 대형 에너지볼
                 skillCooldown = 30;
                 spawnProjectile(player.position, forward, 0.2, 0.7, 0x9b59b6, 25, 'player');
             } 
-            else if (type === 'D') { // 연사 샷
+            else if (type === 'D') { // 2연사 샷
                 skillCooldown = 25;
                 spawnProjectile(player.position, forward, 0.4, 0.2, 0xffff00, 12, 'player');
                 setTimeout(() => {
-                    if (!isGameOver) spawnProjectile(player.position, forward, 0.4, 0.2, 0xffff00, 12, 'player');
+                    if (!isGameOver) {
+                        const newForward = getPlayerForward();
+                        spawnProjectile(player.position, newForward, 0.4, 0.2, 0xffff00, 12, 'player');
+                    }
                 }, 150);
             }
         }
@@ -508,7 +521,6 @@
             isInvincible = false;
             isGameOver = false;
 
-            // 투사체 제거
             projectiles.forEach(p => scene.remove(p.mesh));
             projectiles = [];
 
