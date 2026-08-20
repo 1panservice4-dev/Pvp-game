@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 3인칭 AI 대전 게임 - 타겟 록온 카메라 시점</title>
+    <title>3D 3인칭 대전 - 점령전 & 타깃 전환 시스템</title>
     <style>
         body {
             margin: 0;
@@ -25,7 +25,7 @@
             font-size: 16px;
         }
         .bar-container {
-            width: 220px;
+            width: 200px;
             background: rgba(0, 0, 0, 0.6);
             border: 2px solid #fff;
             border-radius: 10px;
@@ -34,16 +34,43 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
         .bar {
-            height: 20px;
+            height: 16px;
             border-radius: 6px;
             transition: width 0.2s ease;
         }
         #player-hp { background: #2ecc71; width: 100%; }
         #ai-hp { background: #e74c3c; width: 100%; }
         
+        /* 점령전 UI */
+        #zone-ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        #zone-progress-container {
+            width: 250px;
+            height: 12px;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #fff;
+            border-radius: 6px;
+            margin: 5px auto;
+            overflow: hidden;
+        }
+        #zone-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #3498db;
+            transition: width 0.1s linear, background 0.3s;
+        }
+
         .charge-status {
-            font-size: 13px;
-            margin-top: 6px;
+            font-size: 12px;
+            margin-top: 4px;
             color: #f1c40f;
         }
 
@@ -54,13 +81,13 @@
             transform: translateX(-50%);
             color: white;
             background: rgba(0, 0, 0, 0.85);
-            padding: 12px 24px;
+            padding: 10px 20px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
             pointer-events: none;
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.2);
-            line-height: 1.5;
+            line-height: 1.4;
         }
         #game-over {
             position: absolute;
@@ -85,32 +112,42 @@
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            transition: background 0.2s;
         }
-        #game-over button:hover { background: #2980b9; }
     </style>
-    <!-- Three.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div id="ui">
         <div>
-            <div>플레이어 (BLUE)</div>
+            <div>BLUE (플레이어)</div>
             <div class="bar-container"><div id="player-hp" class="bar"></div></div>
             <div class="charge-status">
-                점프 스택: <span id="jump-count">2 / 2</span> <span id="jump-cd"></span><br>
-                회피 스택: <span id="dodge-count">2 / 2</span> <span id="dodge-cd"></span>
+                점프: <span id="jump-count">2/2</span> | 회피: <span id="dodge-count">2/2</span>
             </div>
         </div>
+
         <div style="text-align: right;">
-            <div>AI 적 (RED)</div>
+            <div>RED (AI 적)</div>
             <div class="bar-container"><div id="ai-hp" class="bar"></div></div>
         </div>
     </div>
 
+    <!-- 점령전 스코어판 -->
+    <div id="zone-ui">
+        <div style="font-size: 18px;">점령 점수 (목표: 100)</div>
+        <div style="font-size: 14px; margin-top: 2px;">
+            BLUE: <span id="score-blue">0</span> | RED: <span id="score-red">0</span>
+        </div>
+        <div id="zone-progress-container">
+            <div id="zone-progress-bar"></div>
+        </div>
+        <div id="zone-owner-text" style="font-size: 12px; color: #aaa;">중립 구역</div>
+    </div>
+
     <div id="controls-hint">
-        <b>이동:</b> 방향키 (시선 록온 기준) | <b>점프:</b> Space | <b>회피:</b> Shift | <b>근접공격:</b> Q<br>
-        <b>상대 자동조준 투사체:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형 에너지볼 | [D] 연사 샷
+        <b>[E] 타깃 록온 전환</b> (현재: <span id="target-mode" style="color:#2ecc71;">록온 ON</span>)<br>
+        <b>이동:</b> 방향키 | <b>점프:</b> Space | <b>회피:</b> Shift | <b>근접공격:</b> Q<br>
+        <b>투사체 발사:</b> [W] 파이어볼 | [A] 3방향 샷 | [S] 대형볼 | [D] 연사
     </div>
 
     <div id="game-over">
@@ -120,10 +157,20 @@
 
     <script>
         let scene, camera, renderer;
-        let player, ai;
+        let player, ai, controlZoneMesh;
         let keys = {};
         let playerHP = 100, aiHP = 100;
         let isGameOver = false;
+
+        // 록온 타깃 시스템
+        let isTargetLocked = true;
+        let eKeyPressedLastFrame = false;
+
+        // 점령전 시스템
+        const ZONE_RADIUS = 5.0;
+        let zoneOwner = 'none'; // 'none', 'player', 'ai'
+        let zoneProgress = 0;   // -100 (AI 점령) ~ 100 (Player 점령)
+        let playerScore = 0, aiScore = 0;
 
         // 피지컬 변수
         let playerVelocityY = 0;
@@ -133,16 +180,15 @@
         let dodgeDir = new THREE.Vector3(0, 0, -1);
         let isInvincible = false;
 
-        // 스택 & 쿨타임 시스템
+        // 쿨타임
         let jumpTimestamps = [];
         let dodgeTimestamps = [];
-        const JUMP_COOLDOWN_MS = 3000;   // 점프 쿨타임 3초
-        const DODGE_COOLDOWN_MS = 5000;  // 회피 쿨타임 5초
-
+        const JUMP_COOLDOWN_MS = 3000;
+        const DODGE_COOLDOWN_MS = 5000;
         let spacePressedLastFrame = false;
         let shiftPressedLastFrame = false;
 
-        // 공격 및 투사체 관리
+        // 공격
         let skillCooldown = 0;
         let meleeCooldown = 0;
         let aiAttackCooldown = 0;
@@ -167,10 +213,9 @@
             const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
             dirLight.position.set(20, 40, 20);
             dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
             scene.add(dirLight);
 
+            // 바닥
             const floorGeo = new THREE.PlaneGeometry(40, 40);
             const floorMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.8 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -181,6 +226,14 @@
             const grid = new THREE.GridHelper(40, 20, 0x00ffff, 0x444444);
             grid.position.y = 0.01;
             scene.add(grid);
+
+            // 점령 구역 표시
+            const zoneGeo = new THREE.RingGeometry(ZONE_RADIUS - 0.2, ZONE_RADIUS, 32);
+            const zoneMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+            controlZoneMesh = new THREE.Mesh(zoneGeo, zoneMat);
+            controlZoneMesh.rotation.x = -Math.PI / 2;
+            controlZoneMesh.position.y = 0.02;
+            scene.add(controlZoneMesh);
 
             player = createCharacter(0x3498db, new THREE.Vector3(0, 0, 10));
             ai = createCharacter(0xe74c3c, new THREE.Vector3(0, 0, -10));
@@ -233,14 +286,21 @@
             return group;
         }
 
-        // 상대방(AI)을 향하는 방향 벡터 (전방 Vector)
+        // 상대방 방향 구하기
         function getDirToTarget() {
             const dir = new THREE.Vector3().subVectors(ai.position, player.position);
-            dir.y = 0; // 수평 기준
+            dir.y = 0;
             return dir.normalize();
         }
 
-        // 투사체 생성
+        // 플레이어 정면 방향 구하기
+        function getPlayerForward() {
+            const forward = new THREE.Vector3(0, 0, 1);
+            forward.applyQuaternion(player.quaternion);
+            forward.y = 0;
+            return forward.normalize();
+        }
+
         function spawnProjectile(position, direction, speed, size, color, damage, owner) {
             const geo = new THREE.SphereGeometry(size, 16, 16);
             const mat = new THREE.MeshBasicMaterial({ color: color });
@@ -261,95 +321,121 @@
             });
         }
 
-        function updateCooldowns() {
-            const now = Date.now();
+        function updateControlZone() {
+            if (isGameOver) return;
 
-            jumpTimestamps = jumpTimestamps.filter(t => now - t < JUMP_COOLDOWN_MS);
-            const availableJumps = 2 - jumpTimestamps.length;
-            document.getElementById('jump-count').innerText = `${availableJumps} / 2`;
-            if (jumpTimestamps.length > 0) {
-                const oldestJump = jumpTimestamps[0];
-                const remain = ((JUMP_COOLDOWN_MS - (now - oldestJump)) / 1000).toFixed(1);
-                document.getElementById('jump-cd').innerText = `(${remain}초)`;
-            } else {
-                document.getElementById('jump-cd').innerText = '';
+            const pDist = new THREE.Vector2(player.position.x, player.position.z).length();
+            const aiDist = new THREE.Vector2(ai.position.x, ai.position.z).length();
+
+            const pInZone = pDist <= ZONE_RADIUS;
+            const aiInZone = aiDist <= ZONE_RADIUS;
+
+            // 점령 게이지 변경
+            if (pInZone && !aiInZone) {
+                zoneProgress = Math.min(100, zoneProgress + 0.8);
+            } else if (!pInZone && aiInZone) {
+                zoneProgress = Math.max(-100, zoneProgress - 0.8);
             }
 
-            dodgeTimestamps = dodgeTimestamps.filter(t => now - t < DODGE_COOLDOWN_MS);
-            const availableDodges = 2 - dodgeTimestamps.length;
-            document.getElementById('dodge-count').innerText = `${availableDodges} / 2`;
-            if (dodgeTimestamps.length > 0) {
-                const oldestDodge = dodgeTimestamps[0];
-                const remain = ((DODGE_COOLDOWN_MS - (now - oldestDodge)) / 1000).toFixed(1);
-                document.getElementById('dodge-cd').innerText = `(${remain}초)`;
-            } else {
-                document.getElementById('dodge-cd').innerText = '';
+            // 구역 점유자 판정
+            const progressBar = document.getElementById('zone-progress-bar');
+            const ownerText = document.getElementById('zone-owner-text');
+
+            if (zoneProgress >= 100) {
+                zoneOwner = 'player';
+                ownerText.innerText = "BLUE 점령 중";
+                ownerText.style.color = "#3498db";
+                controlZoneMesh.material.color.setHex(0x3498db);
+            } else if (zoneProgress <= -100) {
+                zoneOwner = 'ai';
+                ownerText.innerText = "RED 점령 중";
+                ownerText.style.color = "#e74c3c";
+                controlZoneMesh.material.color.setHex(0xe74c3c);
+            } else if (zoneProgress === 0) {
+                zoneOwner = 'none';
+                ownerText.innerText = "중립 구역";
+                ownerText.style.color = "#aaa";
+                controlZoneMesh.material.color.setHex(0xffffff);
             }
-        }
 
-        function updateProjectiles() {
-            for (let i = projectiles.length - 1; i >= 0; i--) {
-                const p = projectiles[i];
-                p.mesh.position.addScaledVector(p.dir, p.speed);
-                p.life--;
+            // 게이지 UI 업데이트
+            const absProgress = Math.abs(zoneProgress);
+            progressBar.style.width = absProgress + '%';
+            progressBar.style.background = zoneProgress > 0 ? '#3498db' : (zoneProgress < 0 ? '#e74c3c' : '#ffffff');
 
-                let hit = false;
-
-                if (p.owner === 'player') {
-                    const dist = p.mesh.position.distanceTo(ai.position);
-                    if (dist < p.radius + 0.6) {
-                        applyDamageToAI(p.damage);
-                        hit = true;
-                    }
-                } else if (p.owner === 'ai') {
-                    const dist = p.mesh.position.distanceTo(player.position);
-                    if (dist < p.radius + 0.6 && !isInvincible) {
-                        applyDamageToPlayer(p.damage);
-                        hit = true;
-                    }
-                }
-
-                if (hit || p.life <= 0 || Math.abs(p.mesh.position.x) > 20 || Math.abs(p.mesh.position.z) > 20) {
-                    scene.remove(p.mesh);
-                    projectiles.splice(i, 1);
-                }
+            // 점령 점수 획득
+            if (zoneOwner === 'player') {
+                playerScore += 0.05;
+                document.getElementById('score-blue').innerText = Math.floor(playerScore);
+                if (playerScore >= 100) endGame("점령 승리! (BLUE)");
+            } else if (zoneOwner === 'ai') {
+                aiScore += 0.05;
+                document.getElementById('score-red').innerText = Math.floor(aiScore);
+                if (aiScore >= 100) endGame("점령 패배! (RED 승리)");
             }
         }
 
         function updatePlayer() {
             if (isGameOver) return;
 
+            // [E] 키 입력 시 타깃 록온 전환
+            const ePressed = keys['KeyE'];
+            if (ePressed && !eKeyPressedLastFrame) {
+                isTargetLocked = !isTargetLocked;
+                const modeText = document.getElementById('target-mode');
+                modeText.innerText = isTargetLocked ? "록온 ON" : "록온 OFF (자유)";
+                modeText.style.color = isTargetLocked ? "#2ecc71" : "#e67e22";
+            }
+            eKeyPressedLastFrame = ePressed;
+
             updateCooldowns();
 
             const speed = 0.15;
-
-            // 시선 방향 (전방 벡터)
-            const forward = getDirToTarget();
-            // 전방 벡터의 우측 직교 벡터 (우측 Vector)
-            const right = new THREE.Vector3(-forward.z, 0, forward.x);
-
             let moveDir = new THREE.Vector3();
 
-            // 시선(상대방) 기준 입력 방향 계산
-            if (keys['ArrowUp']) moveDir.add(forward);       // 상대방 쪽으로 전진
-            if (keys['ArrowDown']) moveDir.sub(forward);     // 상대방에게서 후진
-            if (keys['ArrowRight']) moveDir.add(right);      // 우측 이동
-            if (keys['ArrowLeft']) moveDir.sub(right);       // 좌측 이동
+            if (isTargetLocked) {
+                // [상대 타깃 록온 모드]
+                const forward = getDirToTarget();
+                const right = new THREE.Vector3(-forward.z, 0, forward.x);
+
+                if (keys['ArrowUp']) moveDir.add(forward);
+                if (keys['ArrowDown']) moveDir.sub(forward);
+                if (keys['ArrowRight']) moveDir.add(right);
+                if (keys['ArrowLeft']) moveDir.sub(right);
+
+                if (!isDodging) {
+                    player.rotation.y = Math.atan2(forward.x, forward.z);
+                }
+            } else {
+                // [자유 모드: 캐릭터 시선 정면 기준 이동]
+                let inputX = 0, inputZ = 0;
+                if (keys['ArrowUp']) inputZ -= 1;
+                if (keys['ArrowDown']) inputZ += 1;
+                if (keys['ArrowLeft']) inputX -= 1;
+                if (keys['ArrowRight']) inputX += 1;
+
+                if (inputX !== 0 || inputZ !== 0) {
+                    const moveAngle = Math.atan2(inputX, inputZ);
+                    moveDir.set(Math.sin(moveAngle), 0, Math.cos(moveAngle));
+
+                    if (!isDodging) {
+                        player.rotation.y = moveAngle;
+                    }
+                }
+            }
 
             let isMoving = moveDir.lengthSq() > 0;
-            if (isMoving) {
-                moveDir.normalize();
-            }
+            if (isMoving) moveDir.normalize();
 
             const shiftPressed = keys['ShiftLeft'] || keys['ShiftRight'];
             const spacePressed = keys['Space'];
 
-            // 1. 회피 (Shift)
+            // 회피
             if (shiftPressed && !shiftPressedLastFrame && dodgeTimestamps.length < 2 && !isDodging) {
                 isDodging = true;
                 dodgeTimer = 15;
                 isInvincible = true;
-                dodgeDir = isMoving ? moveDir.clone() : forward.clone();
+                dodgeDir = isMoving ? moveDir.clone() : getPlayerForward();
                 dodgeTimestamps.push(Date.now());
             }
             shiftPressedLastFrame = shiftPressed;
@@ -370,12 +456,7 @@
                 player.position.z += moveDir.z * speed;
             }
 
-            // 캐릭터 회전: 무조건 상대를 바라봄
-            if (!isDodging) {
-                player.rotation.y = Math.atan2(forward.x, forward.z);
-            }
-
-            // 2. 점프 (Space)
+            // 점프
             if (spacePressed && !spacePressedLastFrame && jumpTimestamps.length < 2) {
                 isJumping = true;
                 playerVelocityY = 0.22;
@@ -386,104 +467,137 @@
             if (isJumping) {
                 player.position.y += playerVelocityY;
                 playerVelocityY -= 0.012;
-
                 if (player.position.y <= 0) {
                     player.position.y = 0;
                     isJumping = false;
-                    playerVelocityY = 0;
                 }
-            } else {
-                player.position.y = 0;
             }
 
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
-            // 3. [Q] 근접 공격
+            // 공격
             if (keys['KeyQ'] && meleeCooldown <= 0 && !isDodging) {
                 meleeCooldown = 20;
                 player.userData.swordGroup.rotation.x = -Math.PI / 2;
-
-                const dist = player.position.distanceTo(ai.position);
-                if (dist < 2.5) {
+                if (player.position.distanceTo(ai.position) < 2.5) {
                     applyDamageToAI(15);
                 }
             }
-
             if (meleeCooldown > 0) {
                 meleeCooldown--;
-                if (meleeCooldown < 10) {
-                    player.userData.swordGroup.rotation.x = Math.PI / 4;
-                }
+                if (meleeCooldown < 10) player.userData.swordGroup.rotation.x = Math.PI / 4;
             }
 
-            // 4. [WASD] 투사체 발사
+            // 투사체 발사
             if (skillCooldown <= 0 && !isDodging) {
                 if (keys['KeyW']) triggerProjectileSkill('W');
                 else if (keys['KeyA']) triggerProjectileSkill('A');
                 else if (keys['KeyS']) triggerProjectileSkill('S');
                 else if (keys['KeyD']) triggerProjectileSkill('D');
             }
-
             if (skillCooldown > 0) skillCooldown--;
 
-            // 5. [내 시선] 타겟 록온 카메라 업데이트
-            const cameraHeight = 5.0;     // 카메라 높이
-            const cameraDistance = 8.0;   // 플레이어와의 거리
+            // 카메라 제어
+            const cameraHeight = 5.0;
+            const cameraDistance = 8.0;
 
-            // 카메라 위치: 플레이어 위치 기준, 상대의 반대 방향(뒤쪽)으로 배치
-            camera.position.set(
-                player.position.x - forward.x * cameraDistance,
-                player.position.y + cameraHeight,
-                player.position.z - forward.z * cameraDistance
-            );
-
-            // 카메라 시선: 상대를 중앙에 담도록 바라봄 (약간 높게 조준)
-            camera.lookAt(ai.position.x, ai.position.y + 1.2, ai.position.z);
+            if (isTargetLocked) {
+                // 상대 록온 카메라
+                const forward = getDirToTarget();
+                camera.position.set(
+                    player.position.x - forward.x * cameraDistance,
+                    player.position.y + cameraHeight,
+                    player.position.z - forward.z * cameraDistance
+                );
+                camera.lookAt(ai.position.x, ai.position.y + 1.2, ai.position.z);
+            } else {
+                // 플레이어 정면 바라보기 카메라
+                const pForward = getPlayerForward();
+                camera.position.set(
+                    player.position.x - pForward.x * cameraDistance,
+                    player.position.y + cameraHeight,
+                    player.position.z - pForward.z * cameraDistance
+                );
+                camera.lookAt(player.position.x + pForward.x * 5, player.position.y + 1.2, player.position.z + pForward.z * 5);
+            }
         }
 
         function triggerProjectileSkill(type) {
-            const targetDir = getDirToTarget();
+            // 록온 모드면 상대 방향, 자유 모드면 정면 방향
+            const fireDir = isTargetLocked ? getDirToTarget() : getPlayerForward();
 
-            if (type === 'W') { // 파이어볼
+            if (type === 'W') {
                 skillCooldown = 15;
-                spawnProjectile(player.position, targetDir, 0.45, 0.3, 0xffa500, 15, 'player');
-            } 
-            else if (type === 'A') { // 3방향 확산탄
+                spawnProjectile(player.position, fireDir, 0.45, 0.3, 0xffa500, 15, 'player');
+            } else if (type === 'A') {
                 skillCooldown = 25;
-                const leftDir = targetDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3);
-                const rightDir = targetDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3);
+                const leftDir = fireDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.3);
+                const rightDir = fireDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.3);
 
-                spawnProjectile(player.position, targetDir, 0.35, 0.25, 0x00ffff, 10, 'player');
+                spawnProjectile(player.position, fireDir, 0.35, 0.25, 0x00ffff, 10, 'player');
                 spawnProjectile(player.position, leftDir, 0.35, 0.25, 0x00ffff, 10, 'player');
                 spawnProjectile(player.position, rightDir, 0.35, 0.25, 0x00ffff, 10, 'player');
-            } 
-            else if (type === 'S') { // 대형 에너지볼
+            } else if (type === 'S') {
                 skillCooldown = 30;
-                spawnProjectile(player.position, targetDir, 0.2, 0.7, 0x9b59b6, 25, 'player');
-            } 
-            else if (type === 'D') { // 2연사 샷
+                spawnProjectile(player.position, fireDir, 0.2, 0.7, 0x9b59b6, 25, 'player');
+            } else if (type === 'D') {
                 skillCooldown = 25;
-                spawnProjectile(player.position, targetDir, 0.4, 0.2, 0xffff00, 12, 'player');
+                spawnProjectile(player.position, fireDir, 0.4, 0.2, 0xffff00, 12, 'player');
                 setTimeout(() => {
                     if (!isGameOver) {
-                        const newTargetDir = getDirToTarget();
-                        spawnProjectile(player.position, newTargetDir, 0.4, 0.2, 0xffff00, 12, 'player');
+                        const currentDir = isTargetLocked ? getDirToTarget() : getPlayerForward();
+                        spawnProjectile(player.position, currentDir, 0.4, 0.2, 0xffff00, 12, 'player');
                     }
                 }, 150);
+            }
+        }
+
+        function updateCooldowns() {
+            const now = Date.now();
+            jumpTimestamps = jumpTimestamps.filter(t => now - t < JUMP_COOLDOWN_MS);
+            document.getElementById('jump-count').innerText = `${2 - jumpTimestamps.length}/2`;
+
+            dodgeTimestamps = dodgeTimestamps.filter(t => now - t < DODGE_COOLDOWN_MS);
+            document.getElementById('dodge-count').innerText = `${2 - dodgeTimestamps.length}/2`;
+        }
+
+        function updateProjectiles() {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.mesh.position.addScaledVector(p.dir, p.speed);
+                p.life--;
+
+                let hit = false;
+                if (p.owner === 'player') {
+                    if (p.mesh.position.distanceTo(ai.position) < p.radius + 0.6) {
+                        applyDamageToAI(p.damage);
+                        hit = true;
+                    }
+                } else if (p.owner === 'ai') {
+                    if (p.mesh.position.distanceTo(player.position) < p.radius + 0.6 && !isInvincible) {
+                        applyDamageToPlayer(p.damage);
+                        hit = true;
+                    }
+                }
+
+                if (hit || p.life <= 0 || Math.abs(p.mesh.position.x) > 20 || Math.abs(p.mesh.position.z) > 20) {
+                    scene.remove(p.mesh);
+                    projectiles.splice(i, 1);
+                }
             }
         }
 
         function applyDamageToAI(amount) {
             aiHP = Math.max(0, aiHP - amount);
             document.getElementById('ai-hp').style.width = aiHP + '%';
-            if (aiHP <= 0) endGame('플레이어 승리!');
+            if (aiHP <= 0) endGame('KO 승리! (BLUE)');
         }
 
         function applyDamageToPlayer(amount) {
             playerHP = Math.max(0, playerHP - amount);
             document.getElementById('player-hp').style.width = playerHP + '%';
-            if (playerHP <= 0) endGame('AI 승리!');
+            if (playerHP <= 0) endGame('KO 패배! (RED 승리)');
         }
 
         function updateAI() {
@@ -492,17 +606,26 @@
             const dist = ai.position.distanceTo(player.position);
             const aiSpeed = 0.08;
 
-            const dir = new THREE.Vector3().subVectors(player.position, ai.position).normalize();
+            // AI 이동 우선순위: 점령 구역이 차있지 않다면 중앙 점령 구역으로 이동, 아니면 플레이어 추적
+            let targetPos = player.position;
+            const aiDistToZone = new THREE.Vector2(ai.position.x, ai.position.z).length();
+
+            if (zoneOwner !== 'ai' && aiDistToZone > ZONE_RADIUS * 0.5) {
+                targetPos = new THREE.Vector3(0, 0, 0);
+            }
+
+            const dir = new THREE.Vector3().subVectors(targetPos, ai.position).normalize();
             ai.rotation.y = Math.atan2(dir.x, dir.z);
 
-            if (dist > 2.0) {
+            if (ai.position.distanceTo(targetPos) > 1.5) {
                 ai.position.x += dir.x * aiSpeed;
                 ai.position.z += dir.z * aiSpeed;
-            } else {
-                if (aiAttackCooldown <= 0) {
-                    aiAttacking = true;
-                    aiAttackCooldown = 35;
-                }
+            }
+
+            // 근접 공격
+            if (dist < 2.5 && aiAttackCooldown <= 0) {
+                aiAttacking = true;
+                aiAttackCooldown = 35;
             }
 
             if (aiAttackCooldown > 0) {
@@ -515,10 +638,8 @@
                 }
             }
 
-            if (aiAttacking && aiAttackCooldown === 22) {
-                if (dist < 2.5 && !isInvincible) {
-                    applyDamageToPlayer(10);
-                }
+            if (aiAttacking && aiAttackCooldown === 22 && dist < 2.5 && !isInvincible) {
+                applyDamageToPlayer(10);
             }
         }
 
@@ -529,25 +650,24 @@
         }
 
         function resetGame() {
-            playerHP = 100;
-            aiHP = 100;
+            playerHP = 100; aiHP = 100;
+            playerScore = 0; aiScore = 0;
+            zoneProgress = 0; zoneOwner = 'none';
+
             document.getElementById('player-hp').style.width = '100%';
             document.getElementById('ai-hp').style.width = '100%';
+            document.getElementById('score-blue').innerText = '0';
+            document.getElementById('score-red').innerText = '0';
             document.getElementById('game-over').style.display = 'none';
 
             player.position.set(0, 0, 10);
             ai.position.set(0, 0, -10);
 
-            isJumping = false;
-            isDodging = false;
-            isInvincible = false;
-            isGameOver = false;
+            isJumping = false; isDodging = false; isInvincible = false; isGameOver = false;
 
             projectiles.forEach(p => scene.remove(p.mesh));
             projectiles = [];
-
-            jumpTimestamps = [];
-            dodgeTimestamps = [];
+            jumpTimestamps = []; dodgeTimestamps = [];
         }
 
         function onWindowResize() {
@@ -560,6 +680,7 @@
             requestAnimationFrame(animate);
             updatePlayer();
             updateAI();
+            updateControlZone();
             updateProjectiles();
             renderer.render(scene, camera);
         }
