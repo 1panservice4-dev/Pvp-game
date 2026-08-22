@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3D 3인칭 대전 - 화면(카메라) 시야 기준 조준 시스템</title>
+    <title>3D 3인칭 대전 - 타깃 자동 회전 조준 시스템</title>
     <style>
         body {
             margin: 0;
@@ -115,7 +115,7 @@
             text-align: center;
         }
 
-        /* 임시 모바일 터치 패드 UI */
+        /* 모바일 터치 패드 UI */
         #touch-controls {
             position: absolute;
             bottom: 0;
@@ -276,7 +276,7 @@
 
         // 화면 기준 시야 감지 변수
         let isEnemyInSight = false;
-        const MAX_VIEW_DISTANCE = 25.0; // 화면 내 감지 최대 거리
+        const MAX_VIEW_DISTANCE = 25.0;
 
         // 점령전
         const ZONE_RADIUS = 5.0;
@@ -490,20 +490,23 @@
             return dir.normalize();
         }
 
-        /* --- 플레이어 화면(카메라) 기준 적 포착 로직 --- */
+        /* --- 플레이어 회전을 조준된 적 방향으로 변경 --- */
+        function turnPlayerToTarget() {
+            const dir = getDirToTarget();
+            player.rotation.y = Math.atan2(dir.x, dir.z);
+        }
+
+        /* --- 화면(카메라) 기준 적 감지 --- */
         function checkEnemyOnScreen() {
             const dist = player.position.distanceTo(ai.position);
             if (dist > MAX_VIEW_DISTANCE) return false;
 
-            // 적 위치를 화면 NDC 좌표(-1 ~ 1)로 투영
             const targetPos = ai.position.clone();
-            targetPos.y += 1.0; // 중심 높이
+            targetPos.y += 1.0;
             targetPos.project(camera);
 
-            // z <= 1.0 이면 카메라 전방에 위치함을 의미
             if (targetPos.z > 1.0) return false;
 
-            // 화면 내부 범위 (-0.85 ~ 0.85 영역 내에 들어왔을 때)
             const margin = 0.85;
             return (Math.abs(targetPos.x) <= margin && Math.abs(targetPos.y) <= margin);
         }
@@ -580,7 +583,7 @@
 
             updateCooldowns();
 
-            // 1. 카메라 추적 (캐릭터 정면 등 뒤 고정)
+            // 1. 카메라 추적
             const cameraHeight = 5.0;
             const cameraDistance = 8.0;
             const pForward = getPlayerForward();
@@ -596,7 +599,7 @@
                 player.position.z + pForward.z * 5
             );
 
-            // 2. 카메라 화면 화면에 적이 찍히는지 감지
+            // 2. 적 포착 여부
             isEnemyInSight = checkEnemyOnScreen();
             const crosshair = document.getElementById('crosshair');
             const targetStatus = document.getElementById('target-status');
@@ -687,8 +690,11 @@
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
-            // 근접 공격
+            // 근접 공격 (공격 시 화면 내 적이 있다면 그쪽을 바라봄)
             if (keys['KeyQ'] && meleeCooldown <= 0 && !isDodging) {
+                if (isEnemyInSight) {
+                    turnPlayerToTarget();
+                }
                 meleeCooldown = 20;
                 player.userData.swordGroup.rotation.x = -Math.PI / 2;
                 if (player.position.distanceTo(ai.position) < 2.5) {
@@ -700,7 +706,7 @@
                 if (meleeCooldown < 10) player.userData.swordGroup.rotation.x = Math.PI / 4;
             }
 
-            // 투사체 발사 (화면에 적이 보이면 적을 조준 발사)
+            // 스킬 공격
             if (skillCooldown <= 0 && !isDodging) {
                 if (keys['KeyW']) triggerProjectileSkill('W');
                 else if (keys['KeyA']) triggerProjectileSkill('A');
@@ -711,7 +717,12 @@
         }
 
         function triggerProjectileSkill(type) {
-            const fireDir = isEnemyInSight ? getDirToTarget() : getPlayerForward();
+            // 조준된 적이 있을 경우 적 방향으로 시선(캐릭터 몸체) 회전
+            if (isEnemyInSight) {
+                turnPlayerToTarget();
+            }
+
+            const fireDir = getPlayerForward();
 
             if (type === 'W') {
                 skillCooldown = 15;
@@ -732,7 +743,8 @@
                 spawnProjectile(player.position, fireDir, 0.4, 0.2, 0xffff00, 12, 'player');
                 setTimeout(() => {
                     if (!isGameOver) {
-                        const currentDir = isEnemyInSight ? getDirToTarget() : getPlayerForward();
+                        if (isEnemyInSight) turnPlayerToTarget();
+                        const currentDir = getPlayerForward();
                         spawnProjectile(player.position, currentDir, 0.4, 0.2, 0xffff00, 12, 'player');
                     }
                 }, 150);
