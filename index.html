@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>3D 3인칭 대전 - 터치패드 적용 버전</title>
+    <title>3D 3인칭 대전 - 화면(카메라) 시야 기준 조준 시스템</title>
     <style>
         body {
             margin: 0;
@@ -101,7 +101,6 @@
             color: #f1c40f;
         }
 
-        /* 컨트롤 패널 / 안내 UI */
         #controls-hint {
             position: absolute;
             top: 100px;
@@ -116,7 +115,7 @@
             text-align: center;
         }
 
-        /* --- 임시 모바일 터치 패드 UI --- */
+        /* 임시 모바일 터치 패드 UI */
         #touch-controls {
             position: absolute;
             bottom: 0;
@@ -127,7 +126,6 @@
             z-index: 10;
         }
 
-        /* 조이스틱 영역 */
         #joystick-area {
             position: absolute;
             bottom: 30px;
@@ -153,7 +151,6 @@
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
         }
 
-        /* 버튼 그룹 */
         #action-buttons {
             position: absolute;
             bottom: 20px;
@@ -181,7 +178,6 @@
             transform: scale(0.95);
         }
 
-        /* 버튼 위치 정의 */
         #btn-q { width: 50px; height: 50px; bottom: 70px; right: 70px; background: rgba(231, 76, 60, 0.6); }
         #btn-w { width: 42px; height: 42px; bottom: 125px; right: 74px; }
         #btn-a { width: 42px; height: 42px; bottom: 74px; right: 125px; }
@@ -245,10 +241,9 @@
     </div>
 
     <div id="controls-hint">
-        <span id="target-status" style="color:#aaa;">적 탐색 중...</span>
+        <span id="target-status" style="color:#aaa;">화면 내 적 탐색 중...</span>
     </div>
 
-    <!-- 임시 모바일 터치 패드 UI -->
     <div id="touch-controls">
         <div id="joystick-area">
             <div id="joystick-stick"></div>
@@ -276,14 +271,12 @@
         let playerHP = 100, aiHP = 100;
         let isGameOver = false;
 
-        // 터치패드 입력 벡터
         let touchMoveX = 0;
         let touchMoveZ = 0;
 
-        // 시야 포착 관련 변수
+        // 화면 기준 시야 감지 변수
         let isEnemyInSight = false;
-        const FOV_ANGLE = Math.PI / 2;
-        const VIEW_DISTANCE = 15.0;
+        const MAX_VIEW_DISTANCE = 25.0; // 화면 내 감지 최대 거리
 
         // 점령전
         const ZONE_RADIUS = 5.0;
@@ -365,7 +358,6 @@
             player = createCharacter(0x3498db, new THREE.Vector3(0, 0, 10));
             ai = createCharacter(0xe74c3c, new THREE.Vector3(0, 0, -10));
 
-            // 이벤트 리스너 등록
             window.addEventListener('keydown', e => keys[e.code] = true);
             window.addEventListener('keyup', e => keys[e.code] = false);
             window.addEventListener('resize', onWindowResize);
@@ -374,7 +366,6 @@
             animate();
         }
 
-        /* --- 터치 조이스틱 & 버튼 제어 로직 --- */
         function initTouchControls() {
             const joystickArea = document.getElementById('joystick-area');
             const joystickStick = document.getElementById('joystick-stick');
@@ -424,7 +415,6 @@
                 touchMoveZ = dy / maxRadius;
             }
 
-            // 액션 버튼 이벤트
             const bindBtn = (id, keyName) => {
                 const el = document.getElementById(id);
                 el.addEventListener('touchstart', (e) => {
@@ -500,14 +490,22 @@
             return dir.normalize();
         }
 
-        function checkEnemyInSight() {
+        /* --- 플레이어 화면(카메라) 기준 적 포착 로직 --- */
+        function checkEnemyOnScreen() {
             const dist = player.position.distanceTo(ai.position);
-            if (dist > VIEW_DISTANCE) return false;
+            if (dist > MAX_VIEW_DISTANCE) return false;
 
-            const forward = getPlayerForward();
-            const dirToEnemy = getDirToTarget();
-            const angle = forward.angleTo(dirToEnemy);
-            return angle <= (FOV_ANGLE / 2);
+            // 적 위치를 화면 NDC 좌표(-1 ~ 1)로 투영
+            const targetPos = ai.position.clone();
+            targetPos.y += 1.0; // 중심 높이
+            targetPos.project(camera);
+
+            // z <= 1.0 이면 카메라 전방에 위치함을 의미
+            if (targetPos.z > 1.0) return false;
+
+            // 화면 내부 범위 (-0.85 ~ 0.85 영역 내에 들어왔을 때)
+            const margin = 0.85;
+            return (Math.abs(targetPos.x) <= margin && Math.abs(targetPos.y) <= margin);
         }
 
         function spawnProjectile(position, direction, speed, size, color, damage, owner) {
@@ -582,14 +580,30 @@
 
             updateCooldowns();
 
-            // 시야 조준 감지
-            isEnemyInSight = checkEnemyInSight();
+            // 1. 카메라 추적 (캐릭터 정면 등 뒤 고정)
+            const cameraHeight = 5.0;
+            const cameraDistance = 8.0;
+            const pForward = getPlayerForward();
+
+            camera.position.set(
+                player.position.x - pForward.x * cameraDistance,
+                player.position.y + cameraHeight,
+                player.position.z - pForward.z * cameraDistance
+            );
+            camera.lookAt(
+                player.position.x + pForward.x * 5,
+                player.position.y + 1.2,
+                player.position.z + pForward.z * 5
+            );
+
+            // 2. 카메라 화면 화면에 적이 찍히는지 감지
+            isEnemyInSight = checkEnemyOnScreen();
             const crosshair = document.getElementById('crosshair');
             const targetStatus = document.getElementById('target-status');
 
             if (isEnemyInSight) {
                 crosshair.classList.add('locked');
-                targetStatus.innerText = "조준 완료 [적 포착]";
+                targetStatus.innerText = "조준 완료 [화면 내 적 포착]";
                 targetStatus.style.color = "#e74c3c";
 
                 targetRingMesh.visible = true;
@@ -597,12 +611,12 @@
                 targetRingMesh.rotation.z += 0.03;
             } else {
                 crosshair.classList.remove('locked');
-                targetStatus.innerText = "적 탐색 중...";
+                targetStatus.innerText = "화면 내 적 탐색 중...";
                 targetStatus.style.color = "#aaa";
                 targetRingMesh.visible = false;
             }
 
-            // 이동 (키보드 + 조이스틱 병합)
+            // 3. 이동 처리
             const speed = 0.15;
             let inputX = touchMoveX;
             let inputZ = touchMoveZ;
@@ -673,7 +687,7 @@
             player.position.x = Math.max(-19, Math.min(19, player.position.x));
             player.position.z = Math.max(-19, Math.min(19, player.position.z));
 
-            // 공격
+            // 근접 공격
             if (keys['KeyQ'] && meleeCooldown <= 0 && !isDodging) {
                 meleeCooldown = 20;
                 player.userData.swordGroup.rotation.x = -Math.PI / 2;
@@ -686,7 +700,7 @@
                 if (meleeCooldown < 10) player.userData.swordGroup.rotation.x = Math.PI / 4;
             }
 
-            // 투사체 발사
+            // 투사체 발사 (화면에 적이 보이면 적을 조준 발사)
             if (skillCooldown <= 0 && !isDodging) {
                 if (keys['KeyW']) triggerProjectileSkill('W');
                 else if (keys['KeyA']) triggerProjectileSkill('A');
@@ -694,22 +708,6 @@
                 else if (keys['KeyD']) triggerProjectileSkill('D');
             }
             if (skillCooldown > 0) skillCooldown--;
-
-            // 카메라 추적
-            const cameraHeight = 5.0;
-            const cameraDistance = 8.0;
-            const pForward = getPlayerForward();
-
-            camera.position.set(
-                player.position.x - pForward.x * cameraDistance,
-                player.position.y + cameraHeight,
-                player.position.z - pForward.z * cameraDistance
-            );
-            camera.lookAt(
-                player.position.x + pForward.x * 5,
-                player.position.y + 1.2,
-                player.position.z + pForward.z * 5
-            );
         }
 
         function triggerProjectileSkill(type) {
@@ -858,7 +856,7 @@
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updatePointerMatrix ? camera.updatePointerMatrix() : camera.updateProjectionMatrix();
+            camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
@@ -874,4 +872,4 @@
         window.onload = init;
     </script>
 </body>
-    </html>
+</html>
