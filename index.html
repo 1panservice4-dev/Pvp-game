@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>건담 스타일 대전 - 자유 카메라 & 록온 이동 시스템</title>
+    <title>건담 스타일 대전 - 구르기(Roll) 회피 시스템</title>
     <style>
         body {
             margin: 0;
@@ -43,7 +43,6 @@
         #player-hp { background: #2ecc71; width: 100%; }
         #ai-hp { background: #e74c3c; width: 100%; }
 
-        /* 조준선 */
         #crosshair {
             position: absolute;
             top: 50%;
@@ -76,7 +75,6 @@
             text-align: center;
         }
 
-        /* 터치 컨트롤 패드 */
         #touch-controls {
             position: absolute;
             bottom: 0;
@@ -115,8 +113,8 @@
             position: absolute;
             bottom: 20px;
             right: 20px;
-            width: 220px;
-            height: 200px;
+            width: 260px;
+            height: 220px;
             pointer-events: auto;
         }
         .touch-btn {
@@ -129,7 +127,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 12px;
             user-select: none;
             touch-action: manipulation;
         }
@@ -137,11 +135,16 @@
             background: rgba(255, 255, 255, 0.4);
         }
 
-        #btn-q { width: 50px; height: 50px; bottom: 70px; right: 70px; background: rgba(231, 76, 60, 0.7); }
-        #btn-w { width: 44px; height: 44px; bottom: 130px; right: 73px; }
-        #btn-a { width: 44px; height: 44px; bottom: 73px; right: 130px; }
-        #btn-s { width: 44px; height: 44px; bottom: 16px; right: 73px; }
-        #btn-d { width: 44px; height: 44px; bottom: 73px; right: 16px; }
+        /* 기동 버튼 */
+        #btn-jump { width: 55px; height: 55px; bottom: 130px; right: 20px; background: rgba(52, 152, 219, 0.7); }
+        #btn-roll { width: 55px; height: 55px; bottom: 65px; right: 20px; background: rgba(241, 196, 15, 0.7); }
+
+        /* 공격/스킬 버튼 */
+        #btn-q { width: 48px; height: 48px; bottom: 10px; right: 80px; background: rgba(231, 76, 60, 0.8); }
+        #btn-w { width: 42px; height: 42px; bottom: 130px; right: 90px; }
+        #btn-a { width: 42px; height: 42px; bottom: 75px; right: 145px; }
+        #btn-s { width: 42px; height: 42px; bottom: 15px; right: 145px; }
+        #btn-d { width: 42px; height: 42px; bottom: 75px; right: 85px; }
 
         #game-over {
             position: absolute;
@@ -193,6 +196,8 @@
             <div id="joystick-stick"></div>
         </div>
         <div id="action-buttons">
+            <div class="touch-btn" id="btn-jump">JUMP</div>
+            <div class="touch-btn" id="btn-roll">ROLL</div>
             <div class="touch-btn" id="btn-q">Q</div>
             <div class="touch-btn" id="btn-w">W</div>
             <div class="touch-btn" id="btn-a">A</div>
@@ -215,9 +220,9 @@
 
         let touchMoveX = 0, touchMoveZ = 0;
 
-        // 건담 카메라 제어 변수 (Orbit)
-        let cameraYaw = 0;   // 수평 회전각
-        let cameraPitch = 0.2; // 수직 회전각
+        // 카메라 변수
+        let cameraYaw = 0;
+        let cameraPitch = 0.2;
         let cameraDistance = 10.0;
         let isDraggingCamera = false;
         let previousMouseX = 0, previousMouseY = 0;
@@ -225,6 +230,20 @@
         let isEnemyInSight = false;
         let skillCooldown = 0, meleeCooldown = 0;
         let projectiles = [];
+
+        // 물리 및 구르기(Roll) 상태 변수
+        let playerVelocityY = 0;
+        let isGrounded = true;
+        let rollCooldown = 0;
+        let isRolling = false;
+        let rollTimer = 0;
+        let rollDir = new THREE.Vector3();
+
+        // AI 상태 변수
+        let aiVelocityY = 0;
+        let aiIsGrounded = true;
+        let aiActionTimer = 0;
+        let aiMoveDir = new THREE.Vector3();
 
         function init() {
             scene = new THREE.Scene();
@@ -246,7 +265,6 @@
             dirLight.castShadow = true;
             scene.add(dirLight);
 
-            // 필드 바닥
             const floorGeo = new THREE.PlaneGeometry(60, 60);
             const floorMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.8 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -258,7 +276,6 @@
             grid.position.y = 0.01;
             scene.add(grid);
 
-            // 록온 링
             const ringGeo = new THREE.RingGeometry(0.8, 1.0, 16);
             const ringMat = new THREE.MeshBasicMaterial({ color: 0xe74c3c, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
             targetRingMesh = new THREE.Mesh(ringGeo, ringMat);
@@ -269,7 +286,6 @@
             player = createCharacter(0x3498db, new THREE.Vector3(0, 0, 10));
             ai = createCharacter(0xe74c3c, new THREE.Vector3(0, 0, -10));
 
-            // 카메라 회전 관련 이벤트
             window.addEventListener('mousedown', onPointerDown);
             window.addEventListener('mousemove', onPointerMove);
             window.addEventListener('mouseup', onPointerUp);
@@ -327,7 +343,6 @@
             return group;
         }
 
-        // 화면 드래그로 카메라 회전
         function onPointerDown(e) {
             if (e.clientX > window.innerWidth * 0.3 && e.clientY < window.innerHeight * 0.7) {
                 isDraggingCamera = true;
@@ -439,6 +454,8 @@
                 el.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; });
             };
 
+            bindBtn('btn-jump', 'Space');
+            bindBtn('btn-roll', 'ShiftLeft');
             bindBtn('btn-q', 'KeyQ');
             bindBtn('btn-w', 'KeyW');
             bindBtn('btn-a', 'KeyA');
@@ -446,7 +463,6 @@
             bindBtn('btn-d', 'KeyD');
         }
 
-        /* --- 카메라 화면 내 적 감지 --- */
         function checkEnemyOnScreen() {
             const targetPos = ai.position.clone();
             targetPos.y += 1.0;
@@ -465,7 +481,7 @@
         function updatePlayer() {
             if (isGameOver) return;
 
-            // 1. 건담 스타일 제3자 시점 오르빗 카메라 위치
+            // 오르빗 카메라 위치
             const camX = player.position.x + cameraDistance * Math.sin(cameraYaw) * Math.cos(cameraPitch);
             const camY = player.position.y + cameraDistance * Math.sin(cameraPitch) + 2.0;
             const camZ = player.position.z + cameraDistance * Math.cos(cameraYaw) * Math.cos(cameraPitch);
@@ -473,7 +489,7 @@
             camera.position.set(camX, camY, camZ);
             camera.lookAt(player.position.x, player.position.y + 1.2, player.position.z);
 
-            // 2. 화면 내 적 록온 판정
+            // 적 록온 판정
             isEnemyInSight = checkEnemyOnScreen();
             const crosshair = document.getElementById('crosshair');
             const targetStatus = document.getElementById('target-status');
@@ -491,52 +507,111 @@
                 targetRingMesh.visible = false;
             }
 
-            // 3. 카메라 바라보는 정면/우측 벡터 기반 이동
-            let inputX = touchMoveX;
-            let inputZ = touchMoveZ;
+            // 점프 및 중력
+            if (keys['Space'] && isGrounded && !isRolling) {
+                playerVelocityY = 0.25;
+                isGrounded = false;
+            }
 
-            if (keys['ArrowUp'] || keys['KeyW_Move']) inputZ -= 1;
-            if (keys['ArrowDown'] || keys['KeyS_Move']) inputZ += 1;
-            if (keys['ArrowLeft'] || keys['KeyA_Move']) inputX -= 1;
-            if (keys['ArrowRight'] || keys['KeyD_Move']) inputX += 1;
+            player.position.y += playerVelocityY;
+            if (!isGrounded) {
+                playerVelocityY -= 0.012;
+                if (player.position.y <= 0) {
+                    player.position.y = 0;
+                    playerVelocityY = 0;
+                    isGrounded = true;
+                }
+            }
 
-            if (Math.abs(inputX) > 0.05 || Math.abs(inputZ) > 0.05) {
-                const speed = 0.16;
+            // 구르기 (ROLL) 시작 로직
+            if (keys['ShiftLeft'] && rollCooldown <= 0 && isGrounded && !isRolling) {
+                isRolling = true;
+                rollTimer = 18; // 구르기 지속 프레임 수
+                rollCooldown = 40; // 쿨타임
 
-                // 카메라의 수평 전방 및 우측 방향 구하기
+                // 구를 방향 설정
+                let inputX = touchMoveX;
+                let inputZ = touchMoveZ;
+                if (keys['ArrowUp'] || keys['KeyW_Move']) inputZ -= 1;
+                if (keys['ArrowDown'] || keys['KeyS_Move']) inputZ += 1;
+                if (keys['ArrowLeft'] || keys['KeyA_Move']) inputX -= 1;
+                if (keys['ArrowRight'] || keys['KeyD_Move']) inputX += 1;
+
                 const camForward = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw)).normalize();
                 const camRight = new THREE.Vector3(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw)).normalize();
 
-                const moveVector = new THREE.Vector3()
-                    .addScaledVector(camRight, inputX)
-                    .addScaledVector(camForward, -inputZ)
-                    .normalize();
+                if (Math.abs(inputX) > 0.05 || Math.abs(inputZ) > 0.05) {
+                    rollDir.set(0, 0, 0)
+                        .addScaledVector(camRight, inputX)
+                        .addScaledVector(camForward, -inputZ)
+                        .normalize();
+                } else {
+                    // 입력이 없으면 플레이어가 전방을 바라보는 방향으로 구르기
+                    rollDir.set(0, 0, 1).applyQuaternion(player.quaternion).normalize();
+                }
 
-                player.position.addScaledVector(moveVector, speed);
-
-                // 이동 중 회전: 공격하지 않을 때 움직이는 방향을 향함
-                player.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+                player.rotation.y = Math.atan2(rollDir.x, rollDir.z);
             }
 
-            // 4. 공격 액션
-            if (keys['KeyQ'] && meleeCooldown <= 0) {
-                if (isEnemyInSight) turnPlayerToTarget();
-                meleeCooldown = 20;
-                player.userData.swordGroup.rotation.x = -Math.PI / 2;
-                if (player.position.distanceTo(ai.position) < 2.5) applyDamageToAI(15);
-            }
-            if (meleeCooldown > 0) {
-                meleeCooldown--;
-                if (meleeCooldown < 10) player.userData.swordGroup.rotation.x = Math.PI / 4;
+            if (rollCooldown > 0) rollCooldown--;
+
+            // 구르기 애니메이션 및 이동 처리
+            if (isRolling) {
+                rollTimer--;
+                player.position.addScaledVector(rollDir, 0.35); // 빠른 회피 이동 속도
+                player.rotation.x += (Math.PI * 2) / 18; // 360도 회전 회파 동작
+
+                if (rollTimer <= 0) {
+                    isRolling = false;
+                    player.rotation.x = 0; // 회전 복원
+                }
+            } else {
+                // 일반 이동 처리
+                let inputX = touchMoveX;
+                let inputZ = touchMoveZ;
+
+                if (keys['ArrowUp'] || keys['KeyW_Move']) inputZ -= 1;
+                if (keys['ArrowDown'] || keys['KeyS_Move']) inputZ += 1;
+                if (keys['ArrowLeft'] || keys['KeyA_Move']) inputX -= 1;
+                if (keys['ArrowRight'] || keys['KeyD_Move']) inputX += 1;
+
+                if (Math.abs(inputX) > 0.05 || Math.abs(inputZ) > 0.05) {
+                    const speed = 0.16;
+
+                    const camForward = new THREE.Vector3(-Math.sin(cameraYaw), 0, -Math.cos(cameraYaw)).normalize();
+                    const camRight = new THREE.Vector3(Math.cos(cameraYaw), 0, -Math.sin(cameraYaw)).normalize();
+
+                    const moveVector = new THREE.Vector3()
+                        .addScaledVector(camRight, inputX)
+                        .addScaledVector(camForward, -inputZ)
+                        .normalize();
+
+                    player.position.addScaledVector(moveVector, speed);
+                    player.rotation.y = Math.atan2(moveVector.x, moveVector.z);
+                }
             }
 
-            if (skillCooldown <= 0) {
-                if (keys['KeyW']) triggerSkill('W');
-                else if (keys['KeyA']) triggerSkill('A');
-                else if (keys['KeyS']) triggerSkill('S');
-                else if (keys['KeyD']) triggerSkill('D');
+            // 공격 (구르기 중 공격 불가)
+            if (!isRolling) {
+                if (keys['KeyQ'] && meleeCooldown <= 0) {
+                    if (isEnemyInSight) turnPlayerToTarget();
+                    meleeCooldown = 20;
+                    player.userData.swordGroup.rotation.x = -Math.PI / 2;
+                    if (player.position.distanceTo(ai.position) < 2.5) applyDamageToAI(15);
+                }
+                if (meleeCooldown > 0) {
+                    meleeCooldown--;
+                    if (meleeCooldown < 10) player.userData.swordGroup.rotation.x = Math.PI / 4;
+                }
+
+                if (skillCooldown <= 0) {
+                    if (keys['KeyW']) triggerSkill('W');
+                    else if (keys['KeyA']) triggerSkill('A');
+                    else if (keys['KeyS']) triggerSkill('S');
+                    else if (keys['KeyD']) triggerSkill('D');
+                }
+                if (skillCooldown > 0) skillCooldown--;
             }
-            if (skillCooldown > 0) skillCooldown--;
         }
 
         function triggerSkill(type) {
@@ -569,7 +644,7 @@
             const mesh = new THREE.Mesh(geo, mat);
 
             mesh.position.copy(position);
-            mesh.position.y = 1.0;
+            mesh.position.y += 1.0;
             scene.add(mesh);
 
             projectiles.push({
@@ -619,12 +694,42 @@
 
         function updateAI() {
             if (isGameOver) return;
-            const dir = new THREE.Vector3().subVectors(player.position, ai.position).normalize();
-            ai.rotation.y = Math.atan2(dir.x, dir.z);
 
-            if (ai.position.distanceTo(player.position) > 3.0) {
-                ai.position.x += dir.x * 0.05;
-                ai.position.z += dir.z * 0.05;
+            const dist = ai.position.distanceTo(player.position);
+            const toPlayer = new THREE.Vector3().subVectors(player.position, ai.position).normalize();
+            ai.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+
+            aiActionTimer++;
+
+            if (aiActionTimer % 60 === 0) {
+                const rand = Math.random();
+                if (rand < 0.4) {
+                    const perp = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
+                    aiMoveDir.copy(perp).multiplyScalar(Math.random() > 0.5 ? 1 : -1);
+                } else if (rand < 0.7) {
+                    aiMoveDir.copy(toPlayer).multiplyScalar(dist > 5 ? 1 : -0.8);
+                } else {
+                    if (aiIsGrounded) {
+                        aiVelocityY = 0.22;
+                        aiIsGrounded = false;
+                    }
+                }
+            }
+
+            ai.position.addScaledVector(aiMoveDir, 0.08);
+
+            ai.position.y += aiVelocityY;
+            if (!aiIsGrounded) {
+                aiVelocityY -= 0.012;
+                if (ai.position.y <= 0) {
+                    ai.position.y = 0;
+                    aiVelocityY = 0;
+                    aiIsGrounded = true;
+                }
+            }
+
+            if (aiActionTimer % 90 === 0) {
+                spawnProjectile(ai.position, toPlayer, 0.35, 0.3, 0xff0055, 8, 'ai');
             }
         }
 
